@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>SS Play RC - Final Stable</title>
+    <title>SS Play RC - Resgate</title>
     <meta name="figmin">
     <style>
         body {
@@ -16,31 +16,37 @@
         .hud {
             position: fixed; top: 20px; left: 20px;
             background: rgba(10, 10, 10, 0.95);
-            border: 2px solid #00ff00;
+            border: 2px solid #3b82f6;
             color: #fff;
             padding: 20px;
             border-radius: 15px;
             text-align: left;
             pointer-events: auto;
             width: 300px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
         }
-        .stat { color: #fff; font-weight: bold; font-size: 16px; }
-        .controls { margin-top: 15px; font-size: 14px; color: #ccc; line-height: 1.6; }
-        b { color: #fff; }
+        .stat { color: #fff; font-weight: bold; font-size: 16px; margin-bottom: 10px;}
+        .btn {
+            background: #3b82f6; border: none; color: white; padding: 8px 16px;
+            border-radius: 5px; cursor: pointer; font-weight: bold; width: 100%;
+            margin-top: 10px;
+        }
+        .btn:active { background: #2563eb; }
+        .controls { margin-top: 15px; font-size: 13px; color: #ccc; line-height: 1.6; }
     </style>
 </head>
 <body>
 
     <div class="hud">
-        <h3 style="margin:0; color:#00ff00;">SS PLAY RC <span style="font-size:12px; color:#fff;">vFinal</span></h3>
+        <h3 style="margin:0 0 10px 0; color:#3b82f6;">SS PLAY RC <span style="font-size:12px; color:#fff;">v19.0</span></h3>
+        
         <div id="status" class="stat">Carregando...</div>
-        <hr style="border-color:#333">
+        
+        <button class="btn" onclick="tentaConectar()">🔄 RECONECTAR</button>
+
         <div class="controls">
-            👉 <b>R2 (Gatilho Dir):</b> Acelerar<br>
-            👈 <b>L2 (Gatilho Esq):</b> Ré / Freio<br>
-            🕹️ <b>Analógico:</b> Direção<br>
-            🛑 <b>Botão A:</b> Resetar
+            👉 <b>R2:</b> Acelerar<br>
+            👈 <b>L2:</b> Ré / Freio<br>
+            🕹️ <b>Analógico:</b> Direção
         </div>
     </div>
 
@@ -49,12 +55,10 @@
         const FORCA_MOTOR = 80.0;
         const VEL_CURVA = 3.5;
         const PESO = 3.0;
-        
-        // Se o carro andar de lado, mude para true
-        const MODELO_DE_LADO = false; 
+        const MODELO_DE_LADO = false; // Mude se andar de lado
         // ---------------
 
-        // --- MATEMÁTICA DE VETOR (Do Avião) ---
+        // --- MATEMÁTICA DO AVIÃO (Para corrigir a direção) ---
         function quaternionMultiply(q1, q2) {
             return {
                 w: q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z,
@@ -72,25 +76,31 @@
             return { x: q2.x, y: q2.y, z: q2.z };
         }
 
-        // --- CONEXÃO (SEU CÓDIGO) ---
+        // --- SUA CONEXÃO ORIGINAL ---
         var car = null;
         var statusDiv = document.getElementById("status");
 
-        document.addEventListener("FigminReady", function() {
+        // Ocorre automaticamente ao iniciar
+        document.addEventListener("FigminReady", tentaConectar);
+
+        // Função isolada para poder chamar no botão também
+        function tentaConectar() {
             car = figmin.findObjectByName("meu_carro");
             
             if (car) {
-                statusDiv.innerText = "PRONTO! ⚡";
+                statusDiv.innerText = "PRONTO! CLIQUE NO RAIO ⚡";
                 statusDiv.style.color = "#00ff00";
                 setupCar();
             } else {
-                statusDiv.innerText = "ERRO: Cadê 'meu_carro'?";
+                statusDiv.innerText = "ERRO: 'meu_carro' não achado.";
                 statusDiv.style.color = "red";
             }
-        });
-        // ---------------------------
+        }
 
         function setupCar() {
+            // Garante que não duplique a física se clicar 2x
+            if(car.physics) return; 
+
             car.addComponent(figmin.ComponentType.PHYSICS, {
                 mass: PESO,           
                 drag: 2.0,            
@@ -111,4 +121,46 @@
 
         function onConnect(connected) {
             statusDiv.innerText = connected ? "PILOTANDO!" : "Desconectado";
-            statusDiv.style.color = connected ? "#00ff00" :
+            statusDiv.style.color = connected ? "#00ff00" : "yellow";
+            if (connected && car.physics) car.physics.wakeUp();
+        }
+
+        function update(dt) {
+            if (!car || !car.physics) return;
+
+            var throttleFwd = figmin.getInput(figmin.InputCode.SELECT_RIGHT);
+            var throttleRev = figmin.getInput(figmin.InputCode.SELECT_LEFT);
+            var steer = -figmin.getInput(figmin.InputCode.AXIS_X_RIGHT);
+            var resetBtn = figmin.getInput(figmin.InputCode.BUTTON_1);
+
+            var inputForce = 0;
+            if (throttleFwd > 0.05) inputForce = throttleFwd;
+            if (throttleRev > 0.05) inputForce = -throttleRev;
+
+            // --- FÍSICA CORRIGIDA (Calcula a frente real) ---
+            var thrustLocal = { x: 0, y: 0, z: 0 };
+            
+            if (MODELO_DE_LADO) {
+                thrustLocal.x = inputForce * FORCA_MOTOR;
+            } else {
+                thrustLocal.z = inputForce * FORCA_MOTOR;
+            }
+
+            // Converte força local para global (Isso resolve o bug da direção!)
+            var thrustWorld = quaternionRotateVector(car.transform.rotationq, thrustLocal);
+
+            if (Math.abs(inputForce) > 0.05) {
+                car.physics.applyForce({
+                    x: thrustWorld.x,
+                    y: thrustWorld.y, 
+                    z: thrustWorld.z
+                });
+            }
+
+            // Direção
+            if (Math.abs(steer) > 0.1) {
+                var currentVel = car.physics.angularVelocity;
+                car.physics.setAngularVelocity({
+                    x: currentVel.x * 0.5,      
+                    y: steer * VEL_CURVA,       
+                    z: currentVel.z *
