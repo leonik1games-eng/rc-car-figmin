@@ -7,71 +7,78 @@
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: transparent; /* Transparente pro AR */
+            background-color: transparent; 
             color: #fff;
             text-align: center;
             overflow: hidden;
             margin: 0;
             display: flex;
             flex-direction: column;
-            justify-content: center;
-            align-items: center;
+            justify-content: center; /* Centraliza verticalmente */
+            align-items: center;     /* Centraliza horizontalmente */
             height: 100vh;
+            
+            /* --- A CORREÇÃO MÁGICA --- */
+            /* Isso deixa você clicar ATRAVÉS da tela pra acertar o carro */
+            pointer-events: none; 
         }
 
         /* O Painel Flutuante */
         .dashboard {
-            background: rgba(0, 0, 0, 0.9);
+            background: rgba(0, 0, 0, 0.85); /* Fundo um pouco mais escuro */
             border: 3px solid #00ff00;
             border-radius: 20px;
-            padding: 30px;
-            width: 320px;
+            padding: 20px;
+            width: 300px;
             box-shadow: 0 0 30px rgba(0, 255, 0, 0.2);
+            
+            /* Isso permite clicar SÓ no painel (se tiver botões) */
+            pointer-events: auto; 
         }
 
-        /* O INDICADOR DE VERSÃO (PISCANTE) */
+        /* Tag de Versão */
         .version-tag {
             background-color: #ff0055;
             color: white;
             font-weight: bold;
-            padding: 5px 15px;
-            border-radius: 10px;
-            margin-bottom: 15px;
+            padding: 5px 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
             display: inline-block;
-            font-size: 18px;
-            animation: pulse 2s infinite;
+            font-size: 14px;
         }
 
-        @keyframes pulse {
-            0% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.8; transform: scale(0.98); }
-            100% { opacity: 1; transform: scale(1); }
-        }
-
-        h1 { margin: 0; font-size: 28px; color: #00ff00; text-transform: uppercase; }
+        h1 { margin: 0; font-size: 24px; color: #00ff00; text-transform: uppercase; }
         
-        .speed-box { margin: 20px 0; border: 1px solid #333; padding: 10px; border-radius: 10px; background: #111; }
-        .speed-val { font-size: 50px; font-weight: bold; color: #fff; }
-        .speed-unit { font-size: 16px; color: #888; }
+        .speed-box { 
+            margin: 15px 0; 
+            border: 1px solid #333; 
+            padding: 10px; 
+            border-radius: 10px; 
+            background: rgba(20, 20, 20, 0.9);
+        }
+        .speed-val { font-size: 40px; font-weight: bold; color: #fff; }
+        .speed-unit { font-size: 14px; color: #888; }
+        .gear-text { color: yellow; font-size: 14px; font-weight: bold; display: block; margin-bottom: 5px;}
 
-        .bars { text-align: left; margin-top: 15px; }
-        .bar-label { font-size: 12px; color: #aaa; display: flex; justify-content: space-between; }
-        .bar-container { background: #333; height: 12px; border-radius: 6px; margin-bottom: 8px; overflow: hidden; }
+        .bars { text-align: left; margin-top: 10px; font-size: 12px;}
+        .bar-label { display: flex; justify-content: space-between; color: #aaa; margin-bottom: 2px;}
+        .bar-container { background: #444; height: 8px; border-radius: 4px; margin-bottom: 8px; overflow: hidden; }
         .bar-fill { height: 100%; background: #00ff00; width: 0%; transition: width 0.1s; }
-        .bar-steer { background: #0088ff; width: 50%; position: relative; left: 0; }
+        .bar-steer { background: #0088ff; width: 50%; }
 
-        #status { margin-top: 15px; font-size: 12px; color: #666; border-top: 1px solid #333; padding-top: 10px;}
+        #status { margin-top: 10px; font-size: 12px; color: #888; border-top: 1px solid #333; padding-top: 8px;}
     </style>
 </head>
 <body>
 
     <div class="dashboard">
-        <div id="versionDisplay" class="version-tag">CARREGANDO...</div>
+        <div class="version-tag">V 4.1 - CORRIGIDO</div>
         
         <h1>SS Play RC</h1>
         
         <div class="speed-box">
-            <div id="gearDisplay" style="color: yellow; font-size: 14px; margin-bottom: 5px;">NEUTRO</div>
+            <span id="gearDisplay" class="gear-text">NEUTRO</span>
             <span id="speedDisplay" class="speed-val">0</span>
             <span class="speed-unit">km/h</span>
         </div>
@@ -80,164 +87,64 @@
             <div class="bar-label"><span>Aceleração</span> <span id="valThrottle">0%</span></div>
             <div class="bar-container"><div id="barThrottle" class="bar-fill"></div></div>
             
-            <div class="bar-label"><span>Direção</span> <span id="valSteer">0</span></div>
-            <div class="bar-container"><div id="barSteer" class="bar-fill bar-steer"></div></div>
+            <div class="bar-label"><span>Direção</span> <span id="valSteer">0.0</span></div>
+            <div class="bar-container"><div id="barSteer" class="bar-fill bar-steer" style="width: 50%"></div></div>
         </div>
 
-        <p id="status">Aguardando conexão...</p>
+        <p id="status">Procurando 'meu_carro'...</p>
     </div>
 
     <script>
-        // --- CONFIGURAÇÕES DE USUÁRIO ---
-        
-        // MUDE ISSO AQUI TODA VEZ QUE EDITAR O CÓDIGO!
-        const VERSAO_ATUAL = "V 4.0 - FINAL"; 
-
-        // Ajustes de Pilotagem
-        const FORCA_MOTOR = 150.0;    // Aumentei pra garantir que anda
-        const FORCA_CURVA = 25.0;     // Curva mais forte
-        const USAR_EIXO_X = false;    // Se andar de lado, mude para true
-        const INVERTER_RE = 1;        // Se a ré for pra frente, mude para -1
-
-        // --------------------------------
+        // --- SEUS AJUSTES ---
+        const FORCA_MOTOR = 200.0;    // Potência
+        const FORCA_CURVA = 25.0;     // Curva
+        const USAR_EIXO_X = false;    // Mude se andar de lado
+        const INVERTER_RE = 1;        // Mude para -1 se a ré for invertida
+        // --------------------
 
         let car = null;
         let isConnected = false;
 
-        // Atualiza o letreiro da versão na hora
-        document.getElementById("versionDisplay").innerText = VERSAO_ATUAL;
-
         document.addEventListener("FigminReady", init);
 
         function init() {
-            car = figmin.findObjectByName("meu_carro");
-            
-            if (!car) {
-                document.getElementById("status").innerText = "ERRO: O objeto 3D deve chamar 'meu_carro'";
-                document.getElementById("status").style.color = "red";
+            // Verifica o modo espacial
+            if (!figmin.isSpatialApp()) {
+                figmin.requireSpatialApp();
                 return;
             }
 
-            // CONFIGURA FÍSICA (ARCADE)
-            // Mass: 5kg (pesado pra não voar)
-            // Drag: 2.0 (freio aerodinamico pra não disparar infinitamente)
+            car = figmin.findObjectByName("meu_carro");
+            
+            if (!car) {
+                document.getElementById("status").innerText = "ERRO: Carro não encontrado.";
+                document.getElementById("status").style.color = "red";
+                // Tenta de novo em 1 segundo (caso o modelo esteja carregando)
+                setTimeout(init, 1000); 
+                return;
+            }
+
+            document.getElementById("status").innerText = "Carro encontrado. Clique no raio ⚡";
+            document.getElementById("status").style.color = "cyan";
+
+            // CONFIGURA FÍSICA
             car.addComponent(figmin.ComponentType.PHYSICS, {
-                mass: 5.0,
-                drag: 2.0, 
-                angularDrag: 4.0, 
-                gravityStrength: 2.5, // Gravidade forte
+                mass: 8.0,            // Bem pesado pra ficar no chão
+                drag: 1.5,            // Freio aerodinâmico
+                angularDrag: 3.0,     // Estabilidade
+                gravityStrength: 3.0, // Gravidade extra
                 collisionDetectionMode: figmin.physics.CollisionDetectionMode.CONTINUOUS_DYNAMIC,
-                kinematic: false
+                kinematic: false      // Começa solto
             });
 
-            // MATERIAL (PNEU)
             car.addComponent(figmin.ComponentType.PHYSICS_MATERIAL, {
                 bounciness: 0.0,
                 staticFriction: 0.8,
-                dynamicFriction: 0.5
+                dynamicFriction: 0.6
             });
 
-            // BOTÃO DE CONEXÃO
+            // ATIVA O RAIO DE CONEXÃO
             figmin.enableInputConnect("Pilotar", [
                 figmin.InputCode.SELECT_RIGHT, // Gatilho
                 figmin.InputCode.AXIS_Y_RIGHT, // Ré
-                figmin.InputCode.AXIS_X_RIGHT, // Curva
-                figmin.InputCode.THUMB_RIGHT   // Reset
-            ], onConnect, car);
-
-            figmin.setUpdateFunction(update);
-        }
-
-        function onConnect(connected) {
-            isConnected = connected;
-            const el = document.getElementById("status");
-            el.innerText = connected ? "SISTEMA CONECTADO" : "Desconectado";
-            el.style.color = connected ? "#00ff00" : "#666";
-
-            if (connected && car.physics) {
-                // Acorda a física e dá um pulinho
-                car.physics.kinematic = false;
-                car.physics.wakeUp();
-                car.physics.applyImpulse({x:0, y:1, z:0});
-            }
-        }
-
-        function update(dt) {
-            if (!car || !isConnected || !car.physics) return;
-
-            // --- INPUTS ---
-            let throttle = figmin.getInput(figmin.InputCode.SELECT_RIGHT); // 0 a 1
-            let steer = -figmin.getInput(figmin.InputCode.AXIS_X_RIGHT);   // -1 a 1
-            let stickY = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT);   // Stick Vertical
-            let resetBtn = figmin.getInput(figmin.InputCode.THUMB_RIGHT);
-
-            // Lógica de Ré (Stick para baixo)
-            let isReversing = false;
-            if (stickY < -0.2) {
-                throttle = Math.abs(stickY); 
-                isReversing = true;
-            }
-
-            // --- FÍSICA ---
-            let forward = car.transform.forward;
-            let right = car.transform.right;
-            
-            // Direção da força (Frente ou Lado dependendo do modelo 3D)
-            let moveDir = USAR_EIXO_X ? right : forward;
-
-            // Acelerar
-            if (throttle > 0.05) {
-                let direction = isReversing ? -1 * INVERTER_RE : 1;
-                
-                // Força bruta
-                let force = {
-                    x: moveDir.x * throttle * FORCA_MOTOR * direction * dt * 60,
-                    y: moveDir.y * throttle * FORCA_MOTOR * direction * dt * 60, // Segue inclinação
-                    z: moveDir.z * throttle * FORCA_MOTOR * direction * dt * 60
-                };
-                car.physics.applyForce(force);
-            }
-
-            // Curvar (Torque)
-            if (Math.abs(steer) > 0.1) {
-                car.physics.applyTorque({
-                    x: 0,
-                    y: steer * FORCA_CURVA * dt * 60,
-                    z: 0
-                });
-            }
-
-            // Estabilização (Anti-Tombo)
-            let up = car.transform.up;
-            if (up.y < 0.5) { 
-                // Se tombar, aplica torque pra desvirar
-                car.physics.applyTorque({ x: forward.x * 10, y: 0, z: forward.z * 10 });
-            }
-
-            // Reset
-            if (resetBtn) doReset();
-
-            // --- ATUALIZA O HUD (VISUAL) ---
-            updateDashboard(throttle, steer, isReversing);
-        }
-
-        function updateDashboard(throttle, steer, isReversing) {
-            // Velocidade Real (Calculada da física)
-            let vel = car.physics.velocity;
-            let speed = Math.sqrt(vel.x*vel.x + vel.y*vel.y + vel.z*vel.z);
-            let kmh = Math.round(speed * 3.6); // m/s para km/h
-
-            document.getElementById("speedDisplay").innerText = kmh;
-            
-            // Marcha
-            let gear = "NEUTRO";
-            if (throttle > 0.05) gear = isReversing ? "RÉ" : "DRIVE";
-            document.getElementById("gearDisplay").innerText = gear;
-
-            // Barras
-            document.getElementById("barThrottle").style.width = (throttle * 100) + "%";
-            document.getElementById("valThrottle").innerText = Math.round(throttle * 100) + "%";
-            
-            // Barra de Direção (começa no meio, 50%)
-            // Steer vai de -1 a 1. Convertemos para 0% a 100%
-            let steerPercent = (steer + 1) / 2 *
+                figmin.InputCode.AXIS_
