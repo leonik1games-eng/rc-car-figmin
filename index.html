@@ -3,14 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="figmin">
-    <title>RC Car Control</title>
+    <title>RC Car SS Play</title>
     <style>
-        :root {
-            --accent: #3b82f6;
-            --bg: #020617;
-            --text-muted: #9ca3af;
-            --ui-scale: 1.6;
-        }
+        :root { --accent: #3b82f6; --bg: #020617; --text-muted: #9ca3af; --ui-scale: 1.6; }
         html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background-color: transparent; }
         body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; text-align: center; color: #f9fafb; }
         .card {
@@ -21,11 +16,10 @@
             max-width: 440px; transform: scale(var(--ui-scale));
         }
         h1 { margin: 0 0 8px; font-size: 26px; }
-        .subtitle { margin: 0 0 18px; font-size: 14px; color: var(--text-muted); }
-        .status-msg { font-weight: bold; color: yellow; margin-bottom: 10px; display: block; }
-        .controls { padding: 14px 16px; border-radius: 14px; background: rgba(59, 130, 246, 0.15); text-align: left; font-size: 14px; }
-        .control-row { display: flex; justify-content: space-between; padding: 2px 0; }
-        .control-key { background: rgba(15, 23, 42, 0.8); padding: 3px 8px; border-radius: 999px; border: 1px solid rgba(191, 219, 254, 0.6); font-size: 12px; }
+        .subtitle { margin: 0 0 10px; font-size: 14px; color: var(--text-muted); }
+        .status-msg { font-weight: bold; color: #fbbf24; margin-bottom: 15px; display: block; font-size: 16px; }
+        .controls { padding: 12px; border-radius: 12px; background: rgba(59, 130, 246, 0.15); text-align: left; font-size: 13px; }
+        .control-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
     </style>
 </head>
 <body>
@@ -33,39 +27,44 @@
         <h1>SS PLAY RC</h1>
         <span id="status" class="status-msg">PROCURANDO 'meu_carro'...</span>
         <div class="controls">
-            <div class="control-row"><span>Acelerar</span><span class="control-key">Gatilho Dir</span></div>
-            <div class="control-row"><span>Virar</span><span class="control-key">Analógico Dir</span></div>
-            <div class="control-row"><span>Ré</span><span class="control-key">Analógico Baixo</span></div>
-            <div class="control-row"><span>Reset</span><span class="control-key">Botão A</span></div>
+            <div class="control-row"><span>Acelerar</span><b>Gatilho Dir</b></div>
+            <div class="control-row"><span>Virar</span><b>Analógico Dir</b></div>
+            <div class="control-row"><span>Ré</span><b>Analógico Baixo</b></div>
+            <div class="control-row"><span>Resetar</span><b>Botão A</b></div>
         </div>
     </div>
 
     <script>
-        var plane = null;
-        var searchInterval = null;
+        var car = null;
+        var radar = null;
 
+        // Inicia a busca assim que o Figmin der o OK
         document.addEventListener("FigminReady", function() {
-            if (!figmin.isSpatialApp()) {
-                figmin.requireSpatialApp();
-                return;
-            }
-
-            // RADAR ATIVADO: Procura o carro a cada 1 segundo
-            searchInterval = setInterval(function() {
-                plane = figmin.findObjectByName("meu_carro");
+            // Radar de 1 segundo
+            radar = setInterval(function() {
+                var found = figmin.findObjectByName("meu_carro");
                 
-                if (plane) {
-                    clearInterval(searchInterval); // Achou! Para de procurar.
-                    document.getElementById('status').innerText = "CARRO ENCONTRADO! CLIQUE NO RAIO ⚡";
+                if (found) {
+                    // 1. MATA O RADAR IMEDIATAMENTE (Para não bugar o raio)
+                    clearInterval(radar);
+                    radar = null;
+                    
+                    // 2. SALVA A REFERÊNCIA
+                    car = found;
+                    
+                    // 3. ATUALIZA A TELA
+                    document.getElementById('status').innerText = "CARRO PRONTO! ⚡";
                     document.getElementById('status').style.color = "#4ade80";
-                    startSystem(plane);
+                    
+                    // 4. LIGA O SISTEMA
+                    startCarSystem();
                 }
             }, 1000);
         });
 
-        function startSystem(obj) {
-            // Injeta a física (Dynamic)
-            obj.addComponent(figmin.ComponentType.PHYSICS, {
+        function startCarSystem() {
+            // Injeta física básica
+            car.addComponent(figmin.ComponentType.PHYSICS, {
                 mass: 1.0,
                 drag: 1.5,
                 angularDrag: 2.5,
@@ -73,57 +72,59 @@
                 kinematic: false
             });
 
-            // Habilita o Raio ⚡
-            figmin.enableInputConnect("RC Controls", [
+            // Cria o raio de conexão
+            figmin.enableInputConnect("Controle RC", [
                 figmin.InputCode.SELECT_RIGHT,
                 figmin.InputCode.AXIS_Y_RIGHT,
                 figmin.InputCode.AXIS_X_RIGHT,
                 figmin.InputCode.BUTTON_1
             ], function(connected) {
                 if(connected) {
-                    document.getElementById('status').innerText = "PILOTANDO!";
-                    if (obj.physics) obj.physics.wakeUp();
+                    document.getElementById('status').innerText = "CONECTADO!";
+                    if (car.physics) car.physics.wakeUp();
                 }
-            }, obj);
+            }, car);
 
+            // Liga o loop de movimento
             figmin.setUpdateFunction(update);
         }
 
         function update(dt) {
-            if (!plane || !plane.physics) return;
+            if (!car || !car.physics) return;
 
             var throttle = figmin.getInput(figmin.InputCode.SELECT_RIGHT);
             var steer = -figmin.getInput(figmin.InputCode.AXIS_X_RIGHT);
-            var reverse = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT);
-            var reset = figmin.getInput(figmin.InputCode.BUTTON_1);
+            var stickY = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT);
+            var btnA = figmin.getInput(figmin.InputCode.BUTTON_1);
 
-            // Reset (Botão A)
-            if (reset) {
+            // Reset
+            if (btnA) {
                 var cam = figmin.getCamera();
-                plane.transform.position = {
+                car.transform.position = {
                     x: cam.transform.position.x + cam.transform.forward.x * 2,
                     y: cam.transform.position.y - 0.5,
                     z: cam.transform.position.z + cam.transform.forward.z * 2
                 };
-                plane.physics.setLinearVelocity({x:0, y:0, z:0});
+                car.physics.setLinearVelocity({x:0, y:0, z:0});
                 return;
             }
 
-            var forward = plane.transform.forward;
-            var power = 40.0;
+            var forward = car.transform.forward;
+            var finalThrottle = (stickY < -0.2) ? stickY : throttle;
 
-            if (reverse < -0.2) throttle = reverse;
-
-            if (Math.abs(throttle) > 0.05) {
-                plane.physics.applyForce({
-                    x: forward.x * throttle * power,
-                    y: forward.y * throttle * power,
-                    z: forward.z * throttle * power
+            // Motor
+            if (Math.abs(finalThrottle) > 0.05) {
+                var power = 45.0;
+                car.physics.applyForce({
+                    x: forward.x * finalThrottle * power,
+                    y: forward.y * finalThrottle * power,
+                    z: forward.z * finalThrottle * power
                 });
             }
 
+            // Direção
             if (Math.abs(steer) > 0.1) {
-                plane.physics.applyTorque({ x: 0, y: steer * 4.0, z: 0 });
+                car.physics.applyTorque({ x: 0, y: steer * 4.0, z: 0 });
             }
         }
     </script>
