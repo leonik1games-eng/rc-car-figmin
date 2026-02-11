@@ -2,6 +2,203 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <title>SS Play RC - Arcade</title>
+    <meta name="figmin">
+    <style>
+        /* Visual Limpo */
+        body {
+            background: transparent;
+            font-family: sans-serif;
+            text-align: center;
+            overflow: hidden;
+            margin: 0;
+            pointer-events: none; /* Laser atravessa */
+        }
+        .hud {
+            position: fixed;
+            top: 20px; left: 20px;
+            background: rgba(0,0,0,0.8);
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #333;
+            max-width: 250px;
+            text-align: left;
+            pointer-events: auto; /* Permite clique */
+        }
+        h1 { margin: 0 0 5px; font-size: 16px; color: white; }
+        .status { font-weight: bold; color: yellow; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="hud">
+        <h1>SS PLAY RC (ARCADE)</h1>
+        <div id="status" class="status">Procurando 'meu_carro'...</div>
+        <div style="margin-top:10px; font-size:12px; color:#aaa;">
+            Use Gatilho R2 p/ Acelerar<br>
+            Analógico p/ Virar
+        </div>
+    </div>
+
+    <script>
+        // --- AJUSTES DO LEONI (MEXA AQUI) ---
+        
+        // Se o carro andar de lado (caranguejo), mude para true
+        const CORRIGIR_LADO = false; 
+
+        // Se o carro estiver lento, aumente (Ex: 300, 500)
+        const FORCA_MOTOR = 250.0;
+
+        // Se virar pouco, aumente (Ex: 5.0, 8.0)
+        const VELOCIDADE_GIRO = 4.0; 
+
+        // ------------------------------------
+
+        var car = null;
+        var statusDiv = document.getElementById("status");
+
+        document.addEventListener("FigminReady", init);
+
+        function init() {
+            if (!figmin.isSpatialApp()) { figmin.requireSpatialApp(); return; }
+            
+            // Busca o carro
+            car = figmin.findObjectByName("meu_carro");
+
+            if (car) {
+                statusDiv.innerText = "CARRO ENCONTRADO! ⚡";
+                statusDiv.style.color = "#00ff00";
+                setupCar();
+            } else {
+                statusDiv.innerText = "ERRO: Objeto 'meu_carro' não achado.";
+                statusDiv.style.color = "red";
+            }
+        }
+
+        function setupCar() {
+            // FÍSICA "ARCADE" (Leve e Solta)
+            car.addComponent(figmin.ComponentType.PHYSICS, {
+                mass: 1.0,            // Leve (1kg) para responder rápido
+                drag: 0.1,            // Quase zero arrasto (desliza)
+                angularDrag: 5.0,     // Para de girar rápido quando solta o analógico
+                gravityStrength: 4.0, // Gravidade alta pra colar no chão e não capotar
+                collisionDetectionMode: figmin.physics.CollisionDetectionMode.CONTINUOUS_DYNAMIC,
+                kinematic: false 
+            });
+
+            // PNEU DE GELO (Sem atrito pra não travar)
+            car.addComponent(figmin.ComponentType.PHYSICS_MATERIAL, {
+                bounciness: 0.0,
+                staticFriction: 0.1,
+                dynamicFriction: 0.1
+            });
+
+            figmin.enableInputConnect("Pilotar", [
+                figmin.InputCode.SELECT_RIGHT,
+                figmin.InputCode.AXIS_Y_RIGHT,
+                figmin.InputCode.AXIS_X_RIGHT,
+                figmin.InputCode.THUMB_RIGHT
+            ], onConnect, car);
+
+            figmin.setUpdateFunction(update);
+        }
+
+        function onConnect(connected) {
+            statusDiv.innerText = connected ? "CONECTADO!" : "Desconectado";
+            statusDiv.style.color = connected ? "#00ff00" : "yellow";
+            if (connected && car.physics) {
+                car.physics.kinematic = false;
+                car.physics.wakeUp();
+            }
+        }
+
+        function update(dt) {
+            if (!car || !car.physics) return;
+
+            // Inputs
+            var throttle = figmin.getInput(figmin.InputCode.SELECT_RIGHT);
+            var steer = -figmin.getInput(figmin.InputCode.AXIS_X_RIGHT);
+            var stickY = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT);
+            var resetBtn = figmin.getInput(figmin.InputCode.THUMB_RIGHT);
+
+            // Lógica de Ré
+            var isReversing = false;
+            if (stickY < -0.2) {
+                throttle = Math.abs(stickY);
+                isReversing = true;
+            }
+
+            // --- CORREÇÃO DE DIREÇÃO ---
+            var forward = car.transform.forward;
+            var right = car.transform.right;
+            
+            // Se CORRIGIR_LADO for true, usa o vetor Right como frente
+            var moveDir = CORRIGIR_LADO ? right : forward;
+            var direction = isReversing ? -1 : 1;
+
+            // 1. ACELERAÇÃO (ApplyForce)
+            if (throttle > 0.05) {
+                // Multiplicador alto (60) para compensar dt
+                var forceMag = throttle * FORCA_MOTOR * direction * dt * 60;
+                
+                car.physics.applyForce({
+                    x: moveDir.x * forceMag,
+                    y: moveDir.y * forceMag, // Acompanha inclinação
+                    z: moveDir.z * forceMag
+                });
+            }
+
+            // 2. CURVA (SetAngularVelocity) - A MUDANÇA CHAVE
+            // Em vez de aplicar força (que briga com o motor), nós DEFINIMOS a rotação.
+            if (Math.abs(steer) > 0.1) {
+                // Pega a velocidade angular atual pra manter inércia nos outros eixos
+                var currentAng = car.physics.angularVelocity;
+                
+                car.physics.setAngularVelocity({
+                    x: currentAng.x,
+                    y: steer * VELOCIDADE_GIRO, // Gira na marra!
+                    z: currentAng.z
+                });
+            }
+
+            // 3. ESTABILIZADOR (Anti-Tombo)
+            // Se o carro inclinar muito, empurra de volta pro chão
+            if (car.transform.up.y < 0.5) {
+                car.physics.applyTorque({ 
+                    x: forward.x * 5, 
+                    y: 0, 
+                    z: forward.z * 5 
+                });
+            }
+
+            // Reset
+            if (resetBtn) doReset();
+        }
+
+        function doReset() {
+            car.physics.setLinearVelocity({x:0, y:0, z:0});
+            car.physics.setAngularVelocity({x:0, y:0, z:0});
+
+            var cam = figmin.getCamera();
+            var fwd = cam.transform.forward;
+            var pos = cam.transform.position;
+
+            car.transform.position = {
+                x: pos.x + fwd.x * 1.5,
+                y: pos.y - 0.5, 
+                z: pos.z + fwd.z * 1.5
+            };
+            
+            if(car.transform.position.y < 0.2) car.transform.position.y = 0.5;
+            car.transform.rotation = { x:0, y: cam.transform.rotation.y, z:0 };
+        }
+    </script>
+</body>
+</html><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SS Play RC</title>
     <meta name="figmin">
