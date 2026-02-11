@@ -4,8 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RC Car Demo</title>
-  <!-- Necessário para Figmin -->
+  <title>RC Car Demo - meu_carro</title>
   <meta name="figmin" />
 
   <style>
@@ -59,31 +58,15 @@
     }
 
     .subtitle {
-      margin: 0 0 18px;
+      margin: 0 0 16px;
       font-size: 14px;
       color: var(--text-muted);
       line-height: 1.35;
     }
 
-    .status {
+    #status {
       margin-bottom: 12px;
-      font-size: 13px;
-      text-align: left;
-      background: rgba(15, 23, 42, 0.8);
-      border-radius: 12px;
-      padding: 10px 12px;
-      border: 1px solid rgba(148, 163, 184, 0.35);
-    }
-
-    .status-line {
-      margin: 2px 0;
-    }
-
-    .status-label {
-      color: var(--text-muted);
-    }
-
-    .status-value {
+      font-size: 15px;
       font-weight: 600;
     }
 
@@ -91,12 +74,12 @@
       color: #4ade80;
     }
 
-    .warn {
-      color: #facc15;
-    }
-
     .err {
       color: #f97373;
+    }
+
+    .warn {
+      color: #facc15;
     }
 
     .controls {
@@ -156,20 +139,11 @@
   <div class="card">
     <h1>RC Car</h1>
     <p class="subtitle">
-      Coloque um objeto 3D na cena, renomeie para <b>meu_carro</b> e use o raio
-      para conectar o controle.
+      Importe o modelo 3D, renomeie para <b>meu_carro</b> e abra este app no Figmin.<br />
+      Use o raio (ícone de raio) para conectar o controle.
     </p>
 
-    <div class="status">
-      <div class="status-line">
-        <span class="status-label">Objeto 3D:</span>
-        <span id="carStatus" class="status-value warn">Procurando...</span>
-      </div>
-      <div class="status-line">
-        <span class="status-label">Controle:</span>
-        <span id="inputStatus" class="status-value warn">Aguardando conexão...</span>
-      </div>
-    </div>
+    <div id="status" class="warn">Aguardando Figmin...</div>
 
     <div class="controls">
       <div class="controls-title">Controles</div>
@@ -181,7 +155,7 @@
 
       <div class="control-row">
         <span class="control-label">Frear / Ré</span>
-        <span class="control-key">Analógico Direito (para frente / trás)</span>
+        <span class="control-key">Analógico Direito (frente/trás)</span>
       </div>
 
       <div class="control-row">
@@ -191,7 +165,7 @@
 
       <div class="control-row">
         <span class="control-label">Reset</span>
-        <span class="control-key">Clique no Analógico Direito</span>
+        <span class="control-key">Clique Analógico Direito</span>
       </div>
     </div>
 
@@ -199,58 +173,38 @@
   </div>
 
   <script>
-    // RC Car Demo para Figmin XR
+    var car = null;
+    var statusDiv = document.getElementById("status");
+    var outputEl = document.getElementById("output");
 
-    let carro = null;
-    let controleConectado = false;
-
-    const carStatusEl = document.getElementById("carStatus");
-    const inputStatusEl = document.getElementById("inputStatus");
-    const outputEl = document.getElementById("output");
-
-    function setCarStatus(texto, classe) {
-      carStatusEl.textContent = texto;
-      carStatusEl.className = "status-value " + (classe || "");
+    function setStatus(msg, cls) {
+      statusDiv.innerText = msg;
+      statusDiv.className = cls || "";
     }
 
-    function setInputStatus(texto, classe) {
-      inputStatusEl.textContent = texto;
-      inputStatusEl.className = "status-value " + (classe || "");
-    }
-
-    // Tenta encontrar um objeto chamado "meu_carro"
-    function procurarCarroExistente() {
-      // A API oficial expõe figmin.findObjectByName(name) [web:1]
-      if (typeof figmin.findObjectByName === "function") {
-        const obj = figmin.findObjectByName("meu_carro");
-        if (obj) {
-          carro = obj;
-          setCarStatus("Encontrado: \"meu_carro\"", "ok");
-          onCarStart(carro);
-          return;
-        }
-      }
-      setCarStatus("Não encontrado (renomeie o 3D para \"meu_carro\")", "err");
-    }
-
-    function init() {
+    document.addEventListener("FigminReady", function () {
+      // Garante modo espacial
       if (!figmin.isSpatialApp()) {
         figmin.requireSpatialApp();
         return;
       }
 
-      setCarStatus("Procurando \"meu_carro\"...", "warn");
-      procurarCarroExistente();
+      setStatus("Procurando objeto \"meu_carro\"...", "warn");
 
-      // Mesmo se não encontrar agora, o update ainda roda.
-      // Você pode recarregar a página depois de renomear o objeto.
-      figmin.setUpdateFunction(update);
-    }
+      // Mesmo padrão que você usava
+      car = figmin.findObjectByName("meu_carro"); // função suportada na API oficial [web:1]
 
-    // Configura física e input no carro encontrado
-    function onCarStart(obj) {
-      // Física de carro básica
-      obj.addComponent(figmin.ComponentType.PHYSICS, {
+      if (car) {
+        setStatus("PRONTO! ⚡ \"meu_carro\" encontrado", "ok");
+        setupCar();
+      } else {
+        setStatus("ERRO: Cadê \"meu_carro\"?", "err");
+      }
+    });
+
+    function setupCar() {
+      // Adiciona física básica de carro
+      car.addComponent(figmin.ComponentType.PHYSICS, {
         mass: 2.0,
         drag: 0.2,
         angularDrag: 0.5,
@@ -259,13 +213,13 @@
         kinematic: true // começa parado
       });
 
-      obj.addComponent(figmin.ComponentType.PHYSICS_MATERIAL, {
+      car.addComponent(figmin.ComponentType.PHYSICS_MATERIAL, {
         bounciness: 0.0,
         staticFriction: 1.0,
         dynamicFriction: 0.8
       });
 
-      // Ícone de conexão com raio
+      // Habilita o menu de raio para conectar inputs
       figmin.enableInputConnect(
         "RC Car Controls",
         [
@@ -275,33 +229,91 @@
           figmin.InputCode.THUMB_RIGHT    // reset
         ],
         onInputConnectionChanged,
-        obj
+        car
       );
 
-      setCarStatus("Pronto: física aplicada em \"meu_carro\"", "ok");
+      // Função de update
+      figmin.setUpdateFunction(update);
     }
 
     function onInputConnectionChanged(connected, playerId) {
-      controleConectado = connected;
       if (connected) {
-        setInputStatus("Conectado (player " + playerId + ")", "ok");
-        if (carro && carro.physics) {
-          carro.physics.kinematic = false;
+        setStatus("PRONTO! ⚡ Controle conectado (player " + playerId + ")", "ok");
+        if (car && car.physics) {
+          car.physics.kinematic = false;
         }
       } else {
-        setInputStatus("Desconectado", "warn");
+        setStatus("Objeto \"meu_carro\" ok, mas controle desconectado", "warn");
       }
     }
 
     function update(dt) {
-      if (!carro || carro.status.state !== figmin.ObjectState.READY || !carro.physics) {
+      if (!car || car.status.state !== figmin.ObjectState.READY || !car.physics) {
         return;
       }
 
       // Inputs
-      const accelIn = figmin.getInput(figmin.InputCode.SELECT_RIGHT);   // gatilho acelera
-      const brakeIn = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT);   // para frente freia, para trás ré
-      const steerIn = figmin.getInput(figmin.InputCode.AXIS_X_LEFT);    // esquerda/direita
-      const resetDown = figmin.getInput(figmin.InputCode.THUMB_RIGHT);
+      var accelIn = figmin.getInput(figmin.InputCode.SELECT_RIGHT);
+      var brakeIn = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT);
+      var steerIn = figmin.getInput(figmin.InputCode.AXIS_X_LEFT);
+      var resetDown = figmin.getInput(figmin.InputCode.THUMB_RIGHT);
 
-      // Reset: coloca na frente da câmera, nive
+      // Reset: coloca na frente da câmera
+      if (resetDown) {
+        var camera = figmin.getCamera();
+        var fwd = camera.transform.forward;
+        var camPos = camera.transform.position;
+
+        car.transform.position = {
+          x: camPos.x + fwd.x * 1.5,
+          y: camPos.y,
+          z: camPos.z + fwd.z * 1.5
+        };
+
+        var camYaw = Math.atan2(fwd.x, fwd.z) * 180 / Math.PI;
+        car.transform.rotation = { x: 0, y: camYaw, z: 0 };
+
+        car.physics.velocity = { x: 0, y: 0, z: 0 };
+        car.physics.angularVelocity = { x: 0, y: 0, z: 0 };
+        return;
+      }
+
+      // HUD simples de velocidade
+      var v = car.physics.velocity;
+      var speed = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+      outputEl.textContent = "Velocidade: " + speed.toFixed(2) + " m/s";
+
+      if (
+        Math.abs(accelIn) < 0.01 &&
+        Math.abs(brakeIn) < 0.01 &&
+        Math.abs(steerIn) < 0.01
+      ) {
+        return;
+      }
+
+      // Força pra frente (local Z)
+      var maxForwardForce = 15.0;
+      var forwardForce = accelIn * maxForwardForce;
+
+      // Freio / ré
+      var maxBrakeForce = 20.0;
+      if (brakeIn > 0.1) {
+        forwardForce -= brakeIn * maxBrakeForce;
+      } else if (brakeIn < -0.1) {
+        forwardForce += -brakeIn * (maxForwardForce * 0.5);
+      }
+
+      car.physics.applyForce({ x: 0, y: 0, z: forwardForce * dt });
+
+      // Direção: torque em Y
+      var maxSteerTorque = 8.0;
+      car.physics.applyTorque({
+        x: 0,
+        y: steerIn * maxSteerTorque * dt,
+        z: 0
+      });
+    }
+  </script>
+</body>
+
+</html>
