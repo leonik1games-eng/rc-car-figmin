@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="figmin">
-    <title>RC Airplane Demo</title>
+    <title>RC Car Control</title>
     <style>
         :root {
             --accent: #3b82f6;
@@ -22,6 +22,7 @@
         }
         h1 { margin: 0 0 8px; font-size: 26px; }
         .subtitle { margin: 0 0 18px; font-size: 14px; color: var(--text-muted); }
+        .status-msg { font-weight: bold; color: yellow; margin-bottom: 10px; display: block; }
         .controls { padding: 14px 16px; border-radius: 14px; background: rgba(59, 130, 246, 0.15); text-align: left; font-size: 14px; }
         .control-row { display: flex; justify-content: space-between; padding: 2px 0; }
         .control-key { background: rgba(15, 23, 42, 0.8); padding: 3px 8px; border-radius: 999px; border: 1px solid rgba(191, 219, 254, 0.6); font-size: 12px; }
@@ -29,8 +30,8 @@
 </head>
 <body>
     <div class="card">
-        <h1>RC Car Control</h1>
-        <p class="subtitle" id="status">Aponte para o carro e clique no raio ⚡</p>
+        <h1>SS PLAY RC</h1>
+        <span id="status" class="status-msg">PROCURANDO 'meu_carro'...</span>
         <div class="controls">
             <div class="control-row"><span>Acelerar</span><span class="control-key">Gatilho Dir</span></div>
             <div class="control-row"><span>Virar</span><span class="control-key">Analógico Dir</span></div>
@@ -41,32 +42,52 @@
 
     <script>
         var plane = null;
+        var searchInterval = null;
 
         document.addEventListener("FigminReady", function() {
-            plane = figmin.findObjectByName("meu_carro");
-            if (plane) {
-                // Injeta a física
-                plane.addComponent(figmin.ComponentType.PHYSICS, {
-                    mass: 1.0,
-                    drag: 1.5,
-                    angularDrag: 2.5,
-                    gravityStrength: 2.0,
-                    kinematic: false
-                });
-
-                // Habilita o Raio ⚡
-                figmin.enableInputConnect("RC Controls", [
-                    figmin.InputCode.SELECT_RIGHT,
-                    figmin.InputCode.AXIS_Y_RIGHT,
-                    figmin.InputCode.AXIS_X_RIGHT,
-                    figmin.InputCode.BUTTON_1
-                ], function(connected) {
-                    document.getElementById('status').innerText = connected ? "CONECTADO!" : "Aponte para o carro e clique no raio ⚡";
-                    if (connected && plane.physics) plane.physics.wakeUp();
-                }, plane);
+            if (!figmin.isSpatialApp()) {
+                figmin.requireSpatialApp();
+                return;
             }
-            figmin.setUpdateFunction(update);
+
+            // RADAR ATIVADO: Procura o carro a cada 1 segundo
+            searchInterval = setInterval(function() {
+                plane = figmin.findObjectByName("meu_carro");
+                
+                if (plane) {
+                    clearInterval(searchInterval); // Achou! Para de procurar.
+                    document.getElementById('status').innerText = "CARRO ENCONTRADO! CLIQUE NO RAIO ⚡";
+                    document.getElementById('status').style.color = "#4ade80";
+                    startSystem(plane);
+                }
+            }, 1000);
         });
+
+        function startSystem(obj) {
+            // Injeta a física (Dynamic)
+            obj.addComponent(figmin.ComponentType.PHYSICS, {
+                mass: 1.0,
+                drag: 1.5,
+                angularDrag: 2.5,
+                gravityStrength: 2.0,
+                kinematic: false
+            });
+
+            // Habilita o Raio ⚡
+            figmin.enableInputConnect("RC Controls", [
+                figmin.InputCode.SELECT_RIGHT,
+                figmin.InputCode.AXIS_Y_RIGHT,
+                figmin.InputCode.AXIS_X_RIGHT,
+                figmin.InputCode.BUTTON_1
+            ], function(connected) {
+                if(connected) {
+                    document.getElementById('status').innerText = "PILOTANDO!";
+                    if (obj.physics) obj.physics.wakeUp();
+                }
+            }, obj);
+
+            figmin.setUpdateFunction(update);
+        }
 
         function update(dt) {
             if (!plane || !plane.physics) return;
@@ -88,9 +109,8 @@
                 return;
             }
 
-            // Movimento
             var forward = plane.transform.forward;
-            var power = 30.0;
+            var power = 40.0;
 
             if (reverse < -0.2) throttle = reverse;
 
@@ -102,9 +122,8 @@
                 });
             }
 
-            // Curva
             if (Math.abs(steer) > 0.1) {
-                plane.physics.applyTorque({ x: 0, y: steer * 3.0, z: 0 });
+                plane.physics.applyTorque({ x: 0, y: steer * 4.0, z: 0 });
             }
         }
     </script>
