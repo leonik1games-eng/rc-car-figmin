@@ -1,84 +1,188 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RC Car - COLLIDER FORÇADO</title>
-  <meta name="figmin">
-  <!-- Mesmo CSS -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RC Car Demo - FINAL</title>
+  <meta name="figmin" />
+  <style>
+    :root { --accent: #3b82f6; --bg: #020617; --ui-scale: 1.6; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: radial-gradient(circle at top, #0f172a 0, #020617 45%, #000 100%);
+      color: #f9fafb;
+      display: flex; align-items: center; justify-content: center; text-align: center;
+    }
+    .card {
+      padding: 24px 28px; border-radius: 20px; background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      max-width: 440px; transform: scale(var(--ui-scale));
+    }
+    h1 { margin: 0 0 8px; font-size: 26px; }
+    .subtitle { margin: 0 0 16px; font-size: 14px; color: #9ca3af; }
+    #status { margin-bottom: 12px; font-size: 15px; font-weight: 600; }
+    .ok { color: #4ade80; } .err { color: #f97373; } .warn { color: #facc15; }
+    .controls { padding: 14px 16px; border-radius: 14px; background: rgba(59, 130, 246, 0.15); text-align: left; font-size: 14px; }
+    .control-row { display: flex; justify-content: space-between; padding: 2px 0; }
+  </style>
 </head>
 <body>
-  <!-- Mesmo layout -->
-  <div id="status">Aguardando...</div>
-  <div id="debug"></div>
-  <div id="output">Vel: 0 | Acel: 0 | Collider: --</div>
-  <!-- controles -->
+  <div class="card">
+    <h1>RC Car vFinal 🏎️</h1>
+    <p class="subtitle">Garanta que o objeto se chama <b>meu_carro</b></p>
+    <div id="status" class="warn">Aguardando Figmin...</div>
+    <div class="controls">
+      <div class="control-row"><span>Acelerar</span><span>Gatilho Dir</span></div>
+      <div class="control-row"><span>Freio/Ré</span><span>Analógico Dir (Y)</span></div>
+      <div class="control-row"><span>Direção</span><span>Analógico Esq (X)</span></div>
+      <div class="control-row"><span>Reset</span><span>Clique Direito</span></div>
+    </div>
+    <div id="output" style="margin-top:10px; font-size:12px; color:#ccc;">Vel: 0.00 | Acel: 0.00</div>
+  </div>
 
   <script>
-    var car = null;
+    // --- 1. MATEMÁTICA OBRIGATÓRIA (Do código do Avião) ---
+    // Sem isso, o applyForce empurra pro lado errado
+    function quaternionMultiply(q1, q2) {
+      return {
+        w: q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z,
+        x: q1.w * q2.x + q1.x * q2.w + q1.y * q2.z - q1.z * q2.y,
+        y: q1.w * q2.y - q1.x * q2.z + q1.y * q2.w + q1.z * q2.x,
+        z: q1.w * q2.z + q1.x * q2.y - q1.y * q2.x + q1.z * q2.w
+      };
+    }
+    function quaternionConjugate(q) { return { w: q.w, x: -q.x, y: -q.y, z: -q.z }; }
+    function quaternionRotateVector(q, v) {
+      var qv = { w: 0, x: v.x, y: v.y, z: v.z };
+      var qConj = quaternionConjugate(q);
+      var q1 = quaternionMultiply(q, qv);
+      var q2 = quaternionMultiply(q1, qConj);
+      return { x: q2.x, y: q2.y, z: q2.z };
+    }
 
-    document.addEventListener("FigminReady", function() {
-      if (!figmin.isSpatialApp()) figmin.requireSpatialApp();
+    var car = null;
+    var statusDiv = document.getElementById("status");
+    var outputEl = document.getElementById("output");
+
+    function setStatus(msg, cls) {
+      statusDiv.innerText = msg;
+      statusDiv.className = cls || "";
+    }
+
+    // --- 2. CONEXÃO (Seu código que funciona) ---
+    document.addEventListener("FigminReady", function () {
+      if (!figmin.isSpatialApp()) { figmin.requireSpatialApp(); return; }
       
+      setStatus("Procurando 'meu_carro'...", "warn");
       car = figmin.findObjectByName("meu_carro");
-      if (car) setupCar();
+
+      if (car) {
+        setStatus("✅ Carro Encontrado! Clique no Raio.", "ok");
+        setupCar();
+      } else {
+        setStatus("❌ 'meu_carro' não encontrado.", "err");
+      }
     });
 
     function setupCar() {
-      // *** PASSO 1: FORÇA COLLIDER BOX (tamanho automático) ***
-      car.colliderType = figmin.ColliderType.BOX; // BOX simples [web:1]
-
-      // *** PASSO 2: FÍSICA ULTRA LEVE ***
+      // Configura física leve e solta
       car.addComponent(figmin.ComponentType.PHYSICS, {
-        mass: 0.05,        // PLUMA
-        drag: 0.0,         // SEM AR
-        angularDrag: 0.1,
-        gravityStrength: 0.3,
-        kinematic: true
+        mass: 2.0,            // Peso razoável
+        drag: 0.5,            // Pouco arrasto pro ar
+        angularDrag: 2.0,     // Segura o giro
+        gravityStrength: 1.0, 
+        collisionDetectionMode: figmin.physics.CollisionDetectionMode.CONTINUOUS_DYNAMIC,
+        kinematic: true       // Começa travado até conectar
       });
 
+      // Pneu de borracha (Atrito alto pra não deslizar de lado)
       car.addComponent(figmin.ComponentType.PHYSICS_MATERIAL, {
-        bounciness: 0.0,
-        staticFriction: 0.0,  // ZERO ATRITO
-        dynamicFriction: 0.0
+        bounciness: 0.1,
+        staticFriction: 0.8,
+        dynamicFriction: 0.6
       });
 
       figmin.enableInputConnect("RC Car", [
-        figmin.InputCode.SELECT_RIGHT,
-        figmin.InputCode.AXIS_Y_RIGHT,
-        figmin.InputCode.AXIS_X_LEFT,
-        figmin.InputCode.THUMB_RIGHT
+        figmin.InputCode.SELECT_RIGHT, // Acelerar
+        figmin.InputCode.AXIS_Y_RIGHT, // Freio/Ré
+        figmin.InputCode.AXIS_X_LEFT,  // Direção
+        figmin.InputCode.THUMB_RIGHT   // Reset
       ], onInputConnectionChanged, car);
 
       figmin.setUpdateFunction(update);
-      document.getElementById("status").innerText = "✅ Collider BOX + Física OK";
     }
 
-    function onInputConnectionChanged(connected) {
-      if (connected && car.physics) {
-        car.physics.kinematic = false;
-        document.getElementById("status").innerText = "🚗 SOLTO! Acelera!";
+    function onInputConnectionChanged(connected, playerId) {
+      if (connected) {
+        setStatus("PILOTANDO! 🟢", "ok");
+        if (car && car.physics) {
+          car.physics.kinematic = false; // Solta o freio de mão
+          car.physics.wakeUp();          // ACORDA A FÍSICA (Importante!)
+        }
+      } else {
+        setStatus("Desconectado 🔴", "warn");
       }
     }
 
     function update(dt) {
-      if (!car?.physics) return;
+      if (!car || car.status.state !== figmin.ObjectState.READY || !car.physics) return;
 
       var accelIn = figmin.getInput(figmin.InputCode.SELECT_RIGHT);
+      var brakeIn = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT);
+      var steerIn = -figmin.getInput(figmin.InputCode.AXIS_X_LEFT); // Inverti p/ ficar natural
+      var resetDown = figmin.getInput(figmin.InputCode.THUMB_RIGHT);
+
+      // --- 3. RESET ---
+      if (resetDown) {
+        var camera = figmin.getCamera();
+        var fwd = camera.transform.forward;
+        var camPos = camera.transform.position;
+        car.transform.position = {
+          x: camPos.x + fwd.x * 2.0,
+          y: camPos.y - 0.5,
+          z: camPos.z + fwd.z * 2.0
+        };
+        // Zera inércia
+        car.physics.setLinearVelocity({x:0, y:0, z:0});
+        car.physics.setAngularVelocity({x:0, y:0, z:0});
+        // Reseta rotação (Nivelado)
+        var camYaw = Math.atan2(fwd.x, fwd.z) * 180 / Math.PI;
+        car.transform.rotation = { x: 0, y: camYaw, z: 0 };
+        return;
+      }
+
+      // --- 4. CÁLCULO DE MOVIMENTO COM QUATERNION ---
+      
+      // Define força bruta (Motor)
+      var motorForce = 0;
+      if (accelIn > 0.05) motorForce = accelIn * 150.0; // Aumentei força
+      
+      // Lógica de Ré/Freio
+      if (brakeIn < -0.1) motorForce = brakeIn * 80.0; // Ré (valor negativo)
+      
+      // Vetor LOCAL: Z é a frente. (Se seu carro for de lado, mude Z para X aqui)
+      var localThrust = { x: 0, y: 0, z: motorForce * dt }; 
+
+      // Converte LOCAL -> MUNDO usando a rotação do carro
+      var worldThrust = quaternionRotateVector(car.transform.rotationq, localThrust);
+
+      // Aplica Força
+      if (Math.abs(motorForce) > 0.1) {
+        car.physics.applyForce(worldThrust);
+      }
+
+      // --- 5. DIREÇÃO (Torque Local) ---
+      // Gira no eixo Y
+      if (Math.abs(steerIn) > 0.1) {
+        car.physics.applyTorque({ x: 0, y: steerIn * 5.0 * dt, z: 0 });
+      }
+
+      // Debug Visual
       var v = car.physics.velocity;
       var speed = Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
-
-      // DEBUG COMPLETO
-      document.getElementById("output").innerText = 
-        `Vel: ${speed.toFixed(2)} | Acel: ${accelIn.toFixed(2)} | Collider: ${car.colliderType}`;
-
-      document.getElementById("debug").innerText = 
-        `Massa: ${car.physics.mass?.toFixed(2)} | Kin: ${car.physics.kinematic}`;
-
-      if (accelIn > 0.05) {
-        // FORÇA INSANA no eixo Z LOCAL
-        car.physics.applyForce({ x: 0, y: 0, z: 200 * dt }); // 200N!
-      }
+      outputEl.textContent = "Vel: " + speed.toFixed(2) + " | Motor: " + motorForce.toFixed(0);
     }
   </script>
 </body>
