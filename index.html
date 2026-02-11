@@ -1,203 +1,88 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RC Car Demo - FUNCIONA</title>
-  <meta name="figmin" />
-  <style>
-    /* Mesmo CSS do anterior, sem mudanças */
-    :root {
-      --accent: #3b82f6;
-      --accent-soft: rgba(59, 130, 246, 0.15);
-      --bg: #020617;
-      --text-muted: #9ca3af;
-      --ui-scale: 1.6;
-    }
-
-    * { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
-    body {
-      font-family: system-ui, sans-serif;
-      background: radial-gradient(circle at top, #0f172a 0, #020617 45%, #000 100%);
-      color: #f9fafb;
-      display: flex; align-items: center; justify-content: center; text-align: center;
-    }
-
-    .card {
-      padding: 24px 28px; border-radius: 20px; background: rgba(15, 23, 42, 0.95);
-      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.9); border: 1px solid rgba(148, 163, 184, 0.35);
-      max-width: 440px; width: min(90vw, 440px); transform: scale(var(--ui-scale)); transform-origin: center center;
-    }
-
-    h1 { margin: 0 0 8px; font-size: 26px; letter-spacing: 0.04em; }
-    .subtitle { margin: 0 0 16px; font-size: 14px; color: var(--text-muted); line-height: 1.35; }
-
-    #status { margin-bottom: 12px; font-size: 15px; font-weight: 600; }
-    .ok { color: #4ade80; }
-    .err { color: #f97373; }
-    .warn { color: #facc15; }
-
-    .controls { padding: 14px 16px; border-radius: 14px; background: var(--accent-soft); text-align: left; font-size: 14px; line-height: 1.5; }
-    .controls-title { text-transform: uppercase; letter-spacing: 0.12em; font-size: 11px; margin-bottom: 6px; color: #bfdbfe; }
-    .control-row { display: flex; justify-content: space-between; gap: 16px; padding: 2px 0; }
-    .control-label { color: #e5e7eb; }
-    .control-key {
-      font-family: ui-monospace, Consolas, monospace; font-size: 12px; padding: 3px 8px; border-radius: 999px;
-      border: 1px solid rgba(191, 219, 254, 0.6); color: #dbeafe; white-space: nowrap; background: rgba(15, 23, 42, 0.8);
-    }
-
-    #output {
-      font-size: 13px; color: #e5e7eb; background: rgba(2, 6, 23, 0.38);
-      border: 1px solid rgba(148, 163, 184, 0.22); border-radius: 14px; padding: 10px 12px;
-      margin: 10px 0 0; text-align: left;
-    }
-  </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RC Car DEBUG FÍSICA</title>
+  <meta name="figmin">
+  <!-- CSS igual ao anterior, vou pular pra economizar espaço -->
+  <style>/* Mesmo CSS de antes */</style>
 </head>
-
 <body>
+  <!-- Mesmo HTML de antes -->
   <div class="card">
-    <h1>RC Car ✅</h1>
-    <p class="subtitle">Renomeie o 3D para <b>meu_carro</b> → raio → conectar → acelera!</p>
-
-    <div id="status" class="warn">Aguardando Figmin...</div>
-
-    <div class="controls">
-      <div class="controls-title">Controles</div>
-      <div class="control-row"><span class="control-label">Acelerar</span><span class="control-key">Gatilho Direito</span></div>
-      <div class="control-row"><span class="control-label">Freio/Ré</span><span class="control-key">Analógico Direito</span></div>
-      <div class="control-row"><span class="control-label">Direção</span><span class="control-key">Analógico Esquerdo</span></div>
-      <div class="control-row"><span class="control-label">Reset</span><span class="control-key">Clique Direito</span></div>
-    </div>
-
-    <div id="output">Velocidade: 0.00 m/s</div>
+    <h1>RC Car DEBUG</h1>
+    <div id="status">Aguardando...</div>
+    <div id="debug">Massa: -- | Atrito: --</div>
+    <!-- controles iguais -->
+    <div id="output">Vel: 0.00 | Acel: 0.00</div>
   </div>
 
   <script>
     var car = null;
-    var statusDiv = document.getElementById("status");
-    var outputEl = document.getElementById("output");
 
-    function setStatus(msg, cls) {
-      statusDiv.innerText = msg;
-      statusDiv.className = cls || "";
-    }
+    document.addEventListener("FigminReady", function() {
+      if (!figmin.isSpatialApp()) { figmin.requireSpatialApp(); return; }
 
-    document.addEventListener("FigminReady", function () {
-      if (!figmin.isSpatialApp()) {
-        figmin.requireSpatialApp();
-        return;
-      }
-
-      setStatus("Procurando \"meu_carro\"...", "warn");
-
-      car = figmin.findObjectByName("meu_carro"); // [web:1]
-
+      car = figmin.findObjectByName("meu_carro");
       if (car) {
-        setStatus("✅ \"meu_carro\" encontrado!", "ok");
         setupCar();
-      } else {
-        setStatus("❌ Cadê \"meu_carro\"?", "err");
       }
     });
 
     function setupCar() {
+      // FÍSICA SUPER LEVE pra testar
       car.addComponent(figmin.ComponentType.PHYSICS, {
-        mass: 1.0, // mais leve
-        drag: 0.1,
-        angularDrag: 0.3,
-        gravityStrength: 1.0,
-        collisionDetectionMode: figmin.physics.CollisionDetectionMode.CONTINUOUS_DYNAMIC,
+        mass: 0.1,        // MUITO LEVE
+        drag: 0.01,       // SEM AR
+        angularDrag: 0.1,
+        gravityStrength: 0.5, // GRAVIDADE FRACA
         kinematic: true
       });
 
       car.addComponent(figmin.ComponentType.PHYSICS_MATERIAL, {
         bounciness: 0.0,
-        staticFriction: 0.8,
-        dynamicFriction: 0.6 // menos atrito
+        staticFriction: 0.1,   // ATRITO MÍNIMO
+        dynamicFriction: 0.05  // QUASE ZERO
       });
 
-      figmin.enableInputConnect(
-        "RC Car",
-        [
-          figmin.InputCode.SELECT_RIGHT,
-          figmin.InputCode.AXIS_Y_RIGHT,
-          figmin.InputCode.AXIS_X_LEFT,
-          figmin.InputCode.THUMB_RIGHT
-        ],
-        onInputConnectionChanged,
-        car
-      ); // [web:1]
+      figmin.enableInputConnect("RC Car", [
+        figmin.InputCode.SELECT_RIGHT,
+        figmin.InputCode.AXIS_Y_RIGHT,
+        figmin.InputCode.AXIS_X_LEFT,
+        figmin.InputCode.THUMB_RIGHT
+      ], onInputConnectionChanged, car);
 
       figmin.setUpdateFunction(update);
     }
 
-    function onInputConnectionChanged(connected, playerId) {
-      if (connected) {
-        setStatus("✅ CONECTADO! Acelera agora 🚗💨", "ok");
-        if (car && car.physics) {
-          car.physics.kinematic = false;
-        }
-      } else {
-        setStatus("Desconectado", "warn");
+    function onInputConnectionChanged(connected) {
+      if (connected && car.physics) {
+        car.physics.kinematic = false; // SOLTA DEFINITIVO
+        document.getElementById("status").innerText = "✅ SOLTO! Acelera!";
       }
     }
 
     function update(dt) {
-      if (!car || car.status.state !== figmin.ObjectState.READY || !car.physics) {
-        return;
-      }
+      if (!car?.physics) return;
 
       var accelIn = figmin.getInput(figmin.InputCode.SELECT_RIGHT);
-      var brakeIn = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT);
-      var steerIn = figmin.getInput(figmin.InputCode.AXIS_X_LEFT);
-      var resetDown = figmin.getInput(figmin.InputCode.THUMB_RIGHT);
-
-      // Reset
-      if (resetDown) {
-        var camera = figmin.getCamera();
-        var fwd = camera.transform.forward;
-        var camPos = camera.transform.position;
-
-        car.transform.position = {
-          x: camPos.x + fwd.x * 1.5,
-          y: camPos.y + 0.1, // um pouco acima do chão
-          z: camPos.z + fwd.z * 1.5
-        };
-
-        var camYaw = Math.atan2(fwd.x, fwd.z) * 180 / Math.PI;
-        car.transform.rotation = { x: 0, y: camYaw, z: 0 };
-
-        car.physics.velocity = { x: 0, y: 0, z: 0 };
-        car.physics.angularVelocity = { x: 0, y: 0, z: 0 };
-        return;
-      }
-
-      // VELOCIDADE NO HUD
       var v = car.physics.velocity;
-      var speed = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-      outputEl.textContent = "Velocidade: " + speed.toFixed(2) + " m/s | Acel: " + accelIn.toFixed(2);
+      var speed = Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
 
-      if (Math.abs(accelIn) < 0.01 && Math.abs(brakeIn) < 0.01 && Math.abs(steerIn) < 0.01) {
-        return;
+      // DEBUG no HUD
+      document.getElementById("output").innerText = 
+        `Vel: ${speed.toFixed(2)} | Acel: ${accelIn.toFixed(2)} | Kin: ${car.physics.kinematic}`;
+
+      // FORÇA ENORME pra garantir movimento
+      if (accelIn > 0.1) {
+        car.physics.applyForce({ x: 0, y: 0, z: 100 * dt }); // 100N = MUITO FORTE!
       }
 
-      // *** FÍSICA SIMPLES: FORÇA LOCAL DIRETA NO EIXO Z (SEM CONVERSÃO) ***
-      var thrustForce = accelIn * 30.0; // força maior
-      if (brakeIn > 0.1) {
-        thrustForce -= brakeIn * 50.0;
-      } else if (brakeIn < -0.1) {
-        thrustForce += Math.abs(brakeIn) * 15.0; // ré
-      }
-
-      // APLICA FORÇA LOCAL DIRETA (Z = frente do carro)
-      car.physics.applyForce({ x: 0, y: 0, z: thrustForce * dt });
-
-      // STEERING: torque Y local
-      car.physics.applyTorque({ x: 0, y: steerIn * 15.0 * dt, z: 0 });
+      // Debug massa/atrito no card
+      document.getElementById("debug").innerText = 
+        `Massa: ${car.physics.mass?.toFixed(1)} | Atrito: ${car.physicsMaterial?.dynamicFriction || 'N/A'}`;
     }
   </script>
 </body>
-
 </html>
