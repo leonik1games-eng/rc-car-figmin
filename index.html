@@ -2,335 +2,138 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>SS Play RC - Arcade</title>
     <meta name="figmin">
+    <title>SS Play RC - Final</title>
     <style>
-        /* Visual Limpo */
-        body {
-            background: transparent;
-            font-family: sans-serif;
-            text-align: center;
+        /* CORREÇÃO DAS JANELAS: Fundo 100% transparente */
+        html, body {
+            background-color: transparent !important;
+            margin: 0; padding: 0; width: 100%; height: 100%;
             overflow: hidden;
-            margin: 0;
-            pointer-events: none; /* Laser atravessa */
+            display: flex; justify-content: center; align-items: center;
+            pointer-events: none; /* Laser atravessa o fundo */
         }
-        .hud {
-            position: fixed;
-            top: 20px; left: 20px;
-            background: rgba(0,0,0,0.8);
-            color: #00ff00;
-            padding: 15px;
-            border-radius: 10px;
-            border: 1px solid #333;
-            max-width: 250px;
-            text-align: left;
-            pointer-events: auto; /* Permite clique */
+
+        /* Único painel visível */
+        .hud-card {
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #00ff00;
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            color: white;
+            font-family: sans-serif;
+            pointer-events: auto; /* Permite clicar aqui se precisar */
+            max-width: 300px;
         }
-        h1 { margin: 0 0 5px; font-size: 16px; color: white; }
-        .status { font-weight: bold; color: yellow; margin-top: 5px; }
+
+        h2 { margin: 0 0 10px; color: #00ff00; font-size: 20px; }
+        .info { font-size: 14px; color: #ccc; margin-bottom: 10px; }
+        .status { font-weight: bold; color: yellow; font-size: 16px; }
     </style>
 </head>
 <body>
 
-    <div class="hud">
-        <h1>SS PLAY RC (ARCADE)</h1>
-        <div id="status" class="status">Procurando 'meu_carro'...</div>
-        <div style="margin-top:10px; font-size:12px; color:#aaa;">
-            Use Gatilho R2 p/ Acelerar<br>
-            Analógico p/ Virar
+    <div class="hud-card">
+        <h2>SS PLAY RC</h2>
+        <div class="info">
+            <b>Gatilho:</b> Acelerar<br>
+            <b>Botão A:</b> Resetar<br>
+            <b>Analógico:</b> Virar
         </div>
+        <div id="status" class="status">Procurando 'meu_carro'...</div>
     </div>
 
     <script>
-        // --- AJUSTES DO LEONI (MEXA AQUI) ---
+        // --- CONFIGURAÇÕES DE FÍSICA ---
+        // Se o carro for muito lento, aumente a VELOCIDADE
+        const VELOCIDADE = 30.0;     
+        const CURVA = 3.0;           
+        const GRAVIDADE = 8.0;       // Gravidade alta pra colar no chão
         
-        // Se o carro andar de lado (caranguejo), mude para true
-        const CORRIGIR_LADO = false; 
-
-        // Se o carro estiver lento, aumente (Ex: 300, 500)
-        const FORCA_MOTOR = 250.0;
-
-        // Se virar pouco, aumente (Ex: 5.0, 8.0)
-        const VELOCIDADE_GIRO = 4.0; 
-
-        // ------------------------------------
+        // Se a linha verde sair de lado, mude para true
+        const EIXO_FRENTE_X = false; 
+        // -------------------------------
 
         var car = null;
         var statusDiv = document.getElementById("status");
+        var searchTimer = null;
 
-        document.addEventListener("FigminReady", init);
+        // --- FUNÇÕES MATEMÁTICAS (DO AVIÃO) ---
+        function quaternionMultiply(q1, q2) {
+            return {
+                w: q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z,
+                x: q1.w * q2.x + q1.x * q2.w + q1.y * q2.z - q1.z * q2.y,
+                y: q1.w * q2.y - q1.x * q2.z + q1.y * q2.w + q1.z * q2.x,
+                z: q1.w * q2.z + q1.x * q2.y - q1.y * q2.x + q1.z * q2.w
+            };
+        }
+        function quaternionConjugate(q) { return { w: q.w, x: -q.x, y: -q.y, z: -q.z }; }
+        function quaternionRotateVector(q, v) {
+            var qv = { w: 0, x: v.x, y: v.y, z: v.z };
+            var qConj = quaternionConjugate(q);
+            var q1 = quaternionMultiply(q, qv);
+            var q2 = quaternionMultiply(q1, qConj);
+            return { x: q2.x, y: q2.y, z: q2.z };
+        }
+        function vectorAdd(v1, v2) { return { x: v1.x + v2.x, y: v1.y + v2.y, z: v1.z + v2.z }; }
+        function vectorScale(v, s) { return { x: v.x * s, y: v.y * s, z: v.z * s }; }
 
-        function init() {
+        // --- INICIALIZAÇÃO ---
+        document.addEventListener("FigminReady", () => {
             if (!figmin.isSpatialApp()) { figmin.requireSpatialApp(); return; }
             
-            // Busca o carro
-            car = figmin.findObjectByName("meu_carro");
+            // Loop de busca pra garantir que acha o carro
+            searchTimer = setInterval(findCarLoop, 1000);
+        });
 
+        function findCarLoop() {
+            car = figmin.findObjectByName("meu_carro");
             if (car) {
-                statusDiv.innerText = "CARRO ENCONTRADO! ⚡";
+                clearInterval(searchTimer);
+                statusDiv.innerText = "ACHEI! CLIQUE NO RAIO ⚡";
                 statusDiv.style.color = "#00ff00";
                 setupCar();
-            } else {
-                statusDiv.innerText = "ERRO: Objeto 'meu_carro' não achado.";
-                statusDiv.style.color = "red";
             }
         }
 
         function setupCar() {
-            // FÍSICA "ARCADE" (Leve e Solta)
+            // INJETA FÍSICA
             car.addComponent(figmin.ComponentType.PHYSICS, {
-                mass: 1.0,            // Leve (1kg) para responder rápido
-                drag: 0.1,            // Quase zero arrasto (desliza)
-                angularDrag: 5.0,     // Para de girar rápido quando solta o analógico
-                gravityStrength: 4.0, // Gravidade alta pra colar no chão e não capotar
-                collisionDetectionMode: figmin.physics.CollisionDetectionMode.CONTINUOUS_DYNAMIC,
-                kinematic: false 
-            });
-
-            // PNEU DE GELO (Sem atrito pra não travar)
-            car.addComponent(figmin.ComponentType.PHYSICS_MATERIAL, {
-                bounciness: 0.0,
-                staticFriction: 0.1,
-                dynamicFriction: 0.1
-            });
-
-            figmin.enableInputConnect("Pilotar", [
-                figmin.InputCode.SELECT_RIGHT,
-                figmin.InputCode.AXIS_Y_RIGHT,
-                figmin.InputCode.AXIS_X_RIGHT,
-                figmin.InputCode.THUMB_RIGHT
-            ], onConnect, car);
-
-            figmin.setUpdateFunction(update);
-        }
-
-        function onConnect(connected) {
-            statusDiv.innerText = connected ? "CONECTADO!" : "Desconectado";
-            statusDiv.style.color = connected ? "#00ff00" : "yellow";
-            if (connected && car.physics) {
-                car.physics.kinematic = false;
-                car.physics.wakeUp();
-            }
-        }
-
-        function update(dt) {
-            if (!car || !car.physics) return;
-
-            // Inputs
-            var throttle = figmin.getInput(figmin.InputCode.SELECT_RIGHT);
-            var steer = -figmin.getInput(figmin.InputCode.AXIS_X_RIGHT);
-            var stickY = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT);
-            var resetBtn = figmin.getInput(figmin.InputCode.THUMB_RIGHT);
-
-            // Lógica de Ré
-            var isReversing = false;
-            if (stickY < -0.2) {
-                throttle = Math.abs(stickY);
-                isReversing = true;
-            }
-
-            // --- CORREÇÃO DE DIREÇÃO ---
-            var forward = car.transform.forward;
-            var right = car.transform.right;
-            
-            // Se CORRIGIR_LADO for true, usa o vetor Right como frente
-            var moveDir = CORRIGIR_LADO ? right : forward;
-            var direction = isReversing ? -1 : 1;
-
-            // 1. ACELERAÇÃO (ApplyForce)
-            if (throttle > 0.05) {
-                // Multiplicador alto (60) para compensar dt
-                var forceMag = throttle * FORCA_MOTOR * direction * dt * 60;
-                
-                car.physics.applyForce({
-                    x: moveDir.x * forceMag,
-                    y: moveDir.y * forceMag, // Acompanha inclinação
-                    z: moveDir.z * forceMag
-                });
-            }
-
-            // 2. CURVA (SetAngularVelocity) - A MUDANÇA CHAVE
-            // Em vez de aplicar força (que briga com o motor), nós DEFINIMOS a rotação.
-            if (Math.abs(steer) > 0.1) {
-                // Pega a velocidade angular atual pra manter inércia nos outros eixos
-                var currentAng = car.physics.angularVelocity;
-                
-                car.physics.setAngularVelocity({
-                    x: currentAng.x,
-                    y: steer * VELOCIDADE_GIRO, // Gira na marra!
-                    z: currentAng.z
-                });
-            }
-
-            // 3. ESTABILIZADOR (Anti-Tombo)
-            // Se o carro inclinar muito, empurra de volta pro chão
-            if (car.transform.up.y < 0.5) {
-                car.physics.applyTorque({ 
-                    x: forward.x * 5, 
-                    y: 0, 
-                    z: forward.z * 5 
-                });
-            }
-
-            // Reset
-            if (resetBtn) doReset();
-        }
-
-        function doReset() {
-            car.physics.setLinearVelocity({x:0, y:0, z:0});
-            car.physics.setAngularVelocity({x:0, y:0, z:0});
-
-            var cam = figmin.getCamera();
-            var fwd = cam.transform.forward;
-            var pos = cam.transform.position;
-
-            car.transform.position = {
-                x: pos.x + fwd.x * 1.5,
-                y: pos.y - 0.5, 
-                z: pos.z + fwd.z * 1.5
-            };
-            
-            if(car.transform.position.y < 0.2) car.transform.position.y = 0.5;
-            car.transform.rotation = { x:0, y: cam.transform.rotation.y, z:0 };
-        }
-    </script>
-</body>
-</html><!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SS Play RC</title>
-    <meta name="figmin">
-    <style>
-        /* VISUAL EXATO DO AVIÃO (AZUL ESCURO) */
-        :root {
-            --accent: #3b82f6;
-            --bg: #020617;
-            --text-muted: #9ca3af;
-        }
-
-        html, body {
-            margin: 0; padding: 0; height: 100%; overflow: hidden;
-            background-color: transparent; 
-            font-family: system-ui, sans-serif;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-        }
-
-        .card {
-            padding: 24px;
-            border-radius: 20px;
-            background: rgba(15, 23, 42, 0.95);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-            border: 1px solid rgba(148, 163, 184, 0.35);
-            max-width: 400px;
-            color: white;
-        }
-
-        h1 { margin: 0 0 10px; font-size: 24px; color: white; }
-        .info { color: var(--text-muted); font-size: 14px; margin-bottom: 20px; }
-        
-        .status { 
-            font-weight: bold; 
-            padding: 10px; 
-            border-radius: 8px; 
-            background: #333; 
-            color: yellow; 
-        }
-    </style>
-</head>
-<body>
-
-    <div class="card">
-        <h1>SS PLAY RC</h1>
-        <div class="info">
-            Aponte para o carro e clique no RAIO ⚡.<br>
-            Use o Gatilho para acelerar.
-        </div>
-        <div id="status" class="status">Procurando 'meu_carro'...</div>
-    </div>
-
-    <script>
-        // --- CONFIGURAÇÃO DE FÍSICA (CARRO) ---
-        // Aumentei a força pra garantir que ele ande se for pesado
-        const MOTOR = 200.0;
-        const CURVA = 30.0;
-        const GRAVIDADE = 3.0; // 3x gravidade normal pra colar no chão
-        // --------------------------------------
-
-        var car = null;
-        var statusDiv = document.getElementById("status");
-
-        // INICIALIZAÇÃO SIMPLES (IGUAL AO AVIÃO)
-        document.addEventListener("FigminReady", init);
-
-        function init() {
-            // Garante modo AR
-            if (!figmin.isSpatialApp()) {
-                figmin.requireSpatialApp();
-                return;
-            }
-
-            // Busca o objeto UMA VEZ.
-            car = figmin.findObjectByName("meu_carro");
-
-            if (car) {
-                statusDiv.innerText = "CARRO ENCONTRADO! ⚡";
-                statusDiv.style.color = "#4ade80"; // Verde
-                setupCar();
-            } else {
-                statusDiv.innerText = "ERRO: Objeto 'meu_carro' não achado.";
-                statusDiv.style.color = "red";
-            }
-        }
-
-        function setupCar() {
-            // 1. INJETA A FÍSICA (DYNAMIC)
-            // Como você desligou no menu, aqui a gente liga via código.
-            car.addComponent(figmin.ComponentType.PHYSICS, {
-                mass: 8.0,            // 8kg (Pesado/Estável)
-                drag: 2.0,            // Freio aerodinâmico (pra parar quando solta)
-                angularDrag: 4.0,     // Pra não rodopiar
+                mass: 2.0,            
+                drag: 2.0,            // Freio automático
+                angularDrag: 5.0,     // Estabilidade
                 gravityStrength: GRAVIDADE,
                 collisionDetectionMode: figmin.physics.CollisionDetectionMode.CONTINUOUS_DYNAMIC,
                 kinematic: false 
             });
 
-            // 2. MATERIAL DE PNEU
+            // MATERIAL (PNEU)
             car.addComponent(figmin.ComponentType.PHYSICS_MATERIAL, {
-                bounciness: 0.0,      // Sem quique
-                staticFriction: 0.6,  // Atrito lateral
-                dynamicFriction: 0.5
+                bounciness: 0.0,
+                staticFriction: 0.2,
+                dynamicFriction: 0.2
             });
 
-            // 3. ATIVA O RAIO (INPUT CONNECT)
+            // INPUTS
             figmin.enableInputConnect("Pilotar RC", [
-                figmin.InputCode.SELECT_RIGHT,
-                figmin.InputCode.AXIS_Y_RIGHT,
-                figmin.InputCode.AXIS_X_RIGHT,
-                figmin.InputCode.THUMB_RIGHT
+                figmin.InputCode.SELECT_RIGHT, // Gatilho
+                figmin.InputCode.AXIS_Y_RIGHT, // Ré
+                figmin.InputCode.AXIS_X_RIGHT, // Lados
+                figmin.InputCode.BUTTON_1      // Botão A (ou X dependendo da mão)
             ], onConnect, car);
 
-            // 4. LOOP DE CONTROLE
             figmin.setUpdateFunction(update);
         }
 
         function onConnect(connected) {
             if (connected) {
-                statusDiv.innerText = "CONECTADO: PILOTANDO";
-                statusDiv.style.background = "#064e3b";
-                
-                // Acorda a física (Garante que não tá dormindo)
-                if(car.physics) {
-                    car.physics.kinematic = false;
-                    car.physics.wakeUp();
-                }
+                statusDiv.innerText = "CONECTADO: PILOTE AGORA";
+                statusDiv.style.color = "#00ff00";
+                if(car.physics) { car.physics.kinematic = false; car.physics.wakeUp(); }
             } else {
                 statusDiv.innerText = "DESCONECTADO";
-                statusDiv.style.background = "#333";
+                statusDiv.style.color = "yellow";
             }
         }
 
@@ -341,7 +144,8 @@
             var throttle = figmin.getInput(figmin.InputCode.SELECT_RIGHT);
             var steer = -figmin.getInput(figmin.InputCode.AXIS_X_RIGHT);
             var stickY = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT);
-            var resetBtn = figmin.getInput(figmin.InputCode.THUMB_RIGHT);
+            // Botão A (Button 1)
+            var resetBtn = figmin.getInput(figmin.InputCode.BUTTON_1);
 
             // Ré
             var isReversing = false;
@@ -350,54 +154,49 @@
                 isReversing = true;
             }
 
-            var forward = car.transform.forward;
-            var direction = isReversing ? -1 : 1;
+            // --- VETORES LOCAIS ---
+            var direcaoMotor = isReversing ? -1 : 1;
+            var thrustLocal = { x: 0, y: 0, z: 0 };
 
-            // Acelerar
-            if (throttle > 0.05) {
-                var forceX = forward.x * throttle * MOTOR * direction * dt * 60;
-                var forceY = forward.y * throttle * MOTOR * direction * dt * 60;
-                var forceZ = forward.z * throttle * MOTOR * direction * dt * 60;
-                
-                car.physics.applyForce({ x: forceX, y: forceY, z: forceZ });
+            // Define onde é a frente do carro
+            if (EIXO_FRENTE_X) {
+                thrustLocal.x = throttle * VELOCIDADE * direcaoMotor;
+            } else {
+                thrustLocal.z = throttle * VELOCIDADE * direcaoMotor;
             }
 
-            // Curvar
+            // Rotaciona a força para o mundo
+            var thrustWorld = quaternionRotateVector(car.transform.rotationq, thrustLocal);
+            
+            // APLICA FORÇA
+            if (throttle > 0.05) {
+                // Multiplica por 60 para compensar o dt se necessário, mas a fórmula do avião já trata bem
+                car.physics.applyForce(vectorScale(thrustWorld, dt * 60)); 
+            }
+
+            // CURVA (Torque Local no Y)
             if (Math.abs(steer) > 0.1) {
                 car.physics.applyTorque({
                     x: 0,
-                    y: steer * CURVA * dt * 60,
+                    y: steer * CURVA, // Não precisa rotacionar o torque Y, ele é global pro Y do mundo
                     z: 0
                 });
             }
 
-            // Estabilização (Anti-Tombo)
-            if (car.transform.up.y < 0.5) {
-                car.physics.applyTorque({ x: forward.x * 10, y: 0, z: forward.z * 10 });
+            // ESTABILIZAÇÃO (Segura o carro no chão)
+            var angVel = car.physics.angularVelocity;
+            car.physics.setAngularVelocity({
+                x: angVel.x * 0.1, // Mata rotação X (tombo frente/trás)
+                y: angVel.y,       // Deixa girar lados
+                z: angVel.z * 0.1  // Mata rotação Z (tombo lateral)
+            });
+
+            // Se capotar, reseta rotação
+            if (car.transform.up.y < 0.2) {
+                 var rot = car.transform.rotation;
+                 car.transform.rotation = { x: 0, y: rot.y, z: 0 };
             }
 
-            // Reset
-            if (resetBtn) doReset();
-        }
-
-        function doReset() {
-            car.physics.setLinearVelocity({x:0, y:0, z:0});
-            car.physics.setAngularVelocity({x:0, y:0, z:0});
-
-            var cam = figmin.getCamera();
-            var fwd = cam.transform.forward;
-            var pos = cam.transform.position;
-
-            // Teleporta
-            car.transform.position = {
-                x: pos.x + fwd.x * 2.0,
-                y: pos.y - 0.5, 
-                z: pos.z + fwd.z * 2.0
-            };
-            
-            if(car.transform.position.y < 0.2) car.transform.position.y = 0.5;
-            car.transform.rotation = { x:0, y: cam.transform.rotation.y, z:0 };
-        }
-    </script>
-</body>
-</html>
+            // DEBUG VISUAL (LINHA VERDE)
+            var pos = car.transform.position;
+            var debugForwardLocal = EIX
