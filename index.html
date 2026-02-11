@@ -3,114 +3,155 @@
 <head>
     <meta charset="UTF-8">
     <meta name="figmin">
-    <title>SS Play RC Controller</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SS Play RC Debugger</title>
     <style>
-        body { 
-            background-color: #1a1a1a; 
-            color: #00ff00; 
-            font-family: 'Courier New', monospace; 
-            text-align: center; 
-            padding-top: 50px;
+        body {
+            background-color: #000;
+            color: #0f0; /* Verde Hacker */
+            font-family: monospace;
+            font-size: 16px;
+            padding: 20px;
+            text-align: left;
         }
-        .status { font-size: 24px; border: 2px solid #00ff00; padding: 10px; display: inline-block; }
+        .hud {
+            border: 2px solid #0f0;
+            padding: 15px;
+            margin-top: 10px;
+        }
+        h2 { margin: 0; color: #fff; }
+        .red { color: #ff3333; }
+        .yellow { color: #ffff33; }
     </style>
     <script>
-        let car;
-        let spawnPoint;
-        
-        // CONFIGURAÇÕES
-        const RESET_BUTTON = 1; // Botão B do controle
-        const HOLD_TIME_FRAMES = 90; // ~1.5 segundos para resetar
-        let holdCounter = 0;
+        let car = null;
+        let spawnPoint = null;
+        let debugText = "";
 
-        // Quando o Figmin carregar a cena:
-        document.addEventListener("FigminReady", () => {
-            // BUSCA OS OBJETOS PELO NOME (Importante: renomeie no Figmin!)
+        // Tenta rodar assim que o Figmin estiver pronto
+        document.addEventListener("FigminReady", init);
+
+        function init() {
+            // Tenta achar o carro
             car = figmin.findObjectByName("meu_carro");
             spawnPoint = figmin.findObjectByName("spawn_point");
 
-            updateStatus("Sistema Iniciado!");
-            
-            // Inicia o loop de física
+            if (!car) {
+                log("ERRO: Objeto 'meu_carro' NÃO encontrado!");
+            } else {
+                log("SUCESSO: Carro conectado!");
+            }
+
+            // Inicia o loop visual e físico
             loop();
-        });
+        }
 
         function loop() {
+            // 1. Captura os controles
             const gamepads = navigator.getGamepads();
             
-            // Só roda se tiver controle e carro
-            if (gamepads[0] && car) {
-                const gp = gamepads[0];
-
-                // --- PILOTAGEM ---
-                // Gatilhos: R2 (btn 7) acelera, L2 (btn 6) ré
-                let throttle = gp.buttons[7].value - gp.buttons[6].value;
-                // Direção: Analógico Direito (eixo 2) ou Esquerdo (eixo 0)
-                let steer = gp.axes[2]; 
-
-                // Força para frente (respeitando a rotação do carro)
-                let forward = car.getForwardVector();
-                
-                // Zona morta para não andar sozinho
-                if (Math.abs(throttle) > 0.05) {
-                    // Multiplicador 0.5 define a potência. Aumente se o carro for pesado.
-                    car.applyImpulse({
-                        x: forward.x * throttle * 0.5,
-                        y: forward.y * throttle * 0.5,
-                        z: forward.z * throttle * 0.5
-                    });
-                }
-
-                // Curva (Torque)
-                if (Math.abs(steer) > 0.1) {
-                    car.setAngularVelocity({ x: 0, y: -steer * 2.5, z: 0 });
-                }
-
-                // --- RESET (SEGURAR B) ---
-                if (gp.buttons[RESET_BUTTON].pressed) {
-                    holdCounter++;
-                    updateStatus("Resetando em... " + (HOLD_TIME_FRAMES - holdCounter));
-                    
-                    if (holdCounter > HOLD_TIME_FRAMES) {
-                        doReset();
-                        holdCounter = 0;
-                    }
-                } else {
-                    holdCounter = 0;
-                    updateStatus("Pronto para Pilotar");
+            // Pega o primeiro controle ativo (pode ser o da esquerda ou direita)
+            // No Quest, geralmente gamepads[0] e [1] são as mãos.
+            let gp = null;
+            for (let i = 0; i < gamepads.length; i++) {
+                if (gamepads[i] && gamepads[i].buttons.length > 0) {
+                    gp = gamepads[i];
+                    break;
                 }
             }
+
+            if (gp) {
+                // --- MAPEAMENTO QUEST (Geralmente) ---
+                // Botão 0 = Gatilho Indicador (Trigger)
+                // Botão 1 = Gatilho de Mão (Grip)
+                // Botão 4 = A ou X
+                // Botão 5 = B ou Y
+                // Eixo 2 = Analógico Horizontal
+                // Eixo 3 = Analógico Vertical
+
+                // Lê os valores
+                let trigger = gp.buttons[0] ? gp.buttons[0].value : 0; // Acelerar
+                let grip = gp.buttons[1] ? gp.buttons[1].value : 0;    // Freio/Ré
+                let steer = gp.axes[2] || 0;                           // Direção
+                let btnA = gp.buttons[4] ? gp.buttons[4].pressed : false; // Reset 1
+                let btnB = gp.buttons[5] ? gp.buttons[5].pressed : false; // Reset 2
+
+                // --- ATUALIZA A TELA (HUD) ---
+                // Isso vai te mostrar se o controle tá funcionando!
+                let statusHtml = `
+                    <div class="hud">
+                    STATUS DO CONTROLE:<br>
+                    Acelerar (Trigger): ${trigger.toFixed(2)}<br>
+                    Freio (Grip): ${grip.toFixed(2)}<br>
+                    Direção (Analógico): ${steer.toFixed(2)}<br>
+                    Botão A (Reset?): ${btnA ? "PRESSIONADO" : "solto"}<br>
+                    Botão B (Reset?): ${btnB ? "PRESSIONADO" : "solto"}<br>
+                    </div>
+                `;
+                document.getElementById("debug").innerHTML = statusHtml;
+
+                // --- FÍSICA DO CARRO ---
+                if (car) {
+                    let throttle = trigger - grip; // Frente - Ré
+                    let forward = car.getForwardVector();
+
+                    // Zona morta
+                    if (Math.abs(throttle) > 0.05) {
+                        // Força (Ajuste o 0.5 se estiver lento/rápido)
+                        car.applyImpulse({
+                            x: forward.x * throttle * 0.5,
+                            y: forward.y * throttle * 0.5,
+                            z: forward.z * throttle * 0.5
+                        });
+                    }
+
+                    // Curva
+                    if (Math.abs(steer) > 0.1) {
+                        car.setAngularVelocity({ x: 0, y: -steer * 3.0, z: 0 });
+                    }
+
+                    // Reset (Se apertar A ou B)
+                    if (btnA || btnB) {
+                        resetCar();
+                    }
+                }
+            } else {
+                document.getElementById("debug").innerHTML = "<div class='yellow'>Aguardando input do controle...<br>(Aperte algum botão pra acordar)</div>";
+            }
+
             requestAnimationFrame(loop);
         }
 
-        function doReset() {
-            // Para o carro totalmente
+        function resetCar() {
+            if (!car) return;
+            
+            // Para o carro
             car.setLinearVelocity({ x: 0, y: 0, z: 0 });
             car.setAngularVelocity({ x: 0, y: 0, z: 0 });
 
+            // Move
             if (spawnPoint) {
                 let pos = spawnPoint.getPosition();
                 let rot = spawnPoint.getRotation();
-                pos.y += 0.2; // Levanta um pouco pra não travar no chão
+                pos.y += 0.2;
                 car.setPosition(pos);
                 car.setRotation(rot);
-                updateStatus("RESET CONCLUÍDO!");
             } else {
+                // Se não tiver spawn point, joga pro alto no centro
                 car.setPosition({x:0, y:1, z:0});
             }
         }
 
-        function updateStatus(text) {
-            document.getElementById("msg").innerText = text;
+        function log(msg) {
+            console.log(msg);
+            let el = document.getElementById("logs");
+            if (el) el.innerHTML += msg + "<br>";
         }
     </script>
 </head>
 <body>
-    <div class="status">
-        SS PLAY EVENTOS<br>
-        RC SYSTEM V1.0
-    </div>
-    <p id="msg">Carregando...</p>
-    <p>Segure <b>'B'</b> para resetar.</p>
+    <h2>SS PLAY RC - DEBUG</h2>
+    <div id="logs" class="red"></div>
+    <div id="debug">Carregando telemetria...</div>
 </body>
 </html>
