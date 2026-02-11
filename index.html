@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>SS Play RC - Physics Fixed</title>
+    <title>SS Play RC - Final Controls</title>
     <meta name="figmin">
     <style>
         body {
@@ -15,7 +15,7 @@
         }
         .hud {
             position: fixed; top: 20px; left: 20px;
-            background: rgba(0,0,0,0.9);
+            background: rgba(10, 10, 10, 0.95);
             border: 2px solid #00ff00;
             color: #fff;
             padding: 20px;
@@ -23,159 +23,60 @@
             text-align: left;
             pointer-events: auto;
             width: 280px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
         }
-        .stat { color: #00ff00; font-weight: bold; }
-        .hint { font-size: 11px; color: #aaa; margin-top: 10px; }
+        .stat { color: #00ff00; font-weight: bold; font-size: 18px; }
+        .controls { margin-top: 15px; font-size: 14px; color: #ccc; line-height: 1.6; }
+        b { color: #fff; }
     </style>
 </head>
 <body>
 
     <div class="hud">
-        <h3>SS PLAY RC <span style="font-size:12px">vFinal</span></h3>
-        <div id="status" class="stat">Aguardando...</div>
+        <h3 style="margin:0; color:#00ff00;">SS PLAY RC <span style="font-size:12px; color:#fff;">v16.0</span></h3>
+        <div id="status" class="stat">Procurando carro...</div>
         <hr style="border-color:#333">
-        <div style="font-size:13px">
-            <b>Gatilho:</b> Acelerar<br>
-            <b>Analógico (Baixo):</b> Ré<br>
-            <b>Analógico (Lados):</b> Virar
+        <div class="controls">
+            👉 <b>Gatilho DIR (R2):</b> Acelerar<br>
+            👈 <b>Gatilho ESQ (L2):</b> Ré / Freio<br>
+            🕹️ <b>Analógico DIR:</b> Direção (Lados)<br>
+            🛑 <b>Botão A:</b> Resetar
         </div>
-        <div class="hint">
-            Se o carro andar de lado, mude<br>
-            a variável <b>MODO_EIXO</b> no código.
+        <div style="margin-top:10px; font-size:11px; color:#666; border-top:1px solid #333; padding-top:5px;">
+            Ré no analógico: DESATIVADA
         </div>
     </div>
 
     <script>
-        // --- CONFIGURAÇÃO DE EIXO (IMPORTANTE!) ---
-        // 0 = Padrão (Z+) -> A maioria dos modelos
-        // 1 = Eixo X (X+) -> Se o carro andar de lado
-        // 2 = Invertido (Z-) -> Se o carro andar de ré ao acelerar
-        const MODO_EIXO = 0; 
+        // --- AJUSTES DE PILOTAGEM ---
+        const FORCA_MOTOR = 100.0;    // Força do motor
+        const VEL_CURVA = 3.5;        // Velocidade da curva
+        const PESO = 3.0;             // Peso do carro (kg)
         
-        // --- FORÇA ---
-        const MOTOR_POWER = 80.0;  // Força de empurro
-        const TURN_SPEED = 4.0;    // Velocidade de giro
-        // ------------------------------------------
+        // Mude para 'true' APENAS se o carro andar de lado sozinho
+        const MODELO_DE_LADO = false; 
+        // ----------------------------
 
         var car = null;
         var statusDiv = document.getElementById("status");
 
-        document.addEventListener("FigminReady", function() {
-            car = figmin.findObjectByName("meu_carro");
-            
-            if (car) {
-                statusDiv.innerText = "PRONTO! ⚡";
-                setupCar();
-            } else {
-                statusDiv.innerText = "ERRO: Cadê 'meu_carro'?";
-                statusDiv.style.color = "red";
-            }
-        });
-
-        function setupCar() {
-            // FÍSICA PURA (Sem código de fantasma/wisp)
-            car.addComponent(figmin.ComponentType.PHYSICS, {
-                mass: 2.0,            // 2kg (Peso bom pra RC)
-                drag: 2.0,            // Arrasto (freia quando solta)
-                angularDrag: 3.0,     // Para de girar rápido
-                gravityStrength: 1.0, // Gravidade padrão da Terra
-                kinematic: false      // Deixa a física agir
-            });
-
-            // Conecta o controle
-            figmin.enableInputConnect("Controle RC", [
-                figmin.InputCode.SELECT_RIGHT, // Gatilho
-                figmin.InputCode.AXIS_Y_RIGHT, // Analógico Y
-                figmin.InputCode.AXIS_X_RIGHT, // Analógico X
-                figmin.InputCode.THUMB_RIGHT   // Clique Analógico
-            ], onConnect, car);
-
-            figmin.setUpdateFunction(update);
-        }
-
-        function onConnect(connected) {
-            statusDiv.innerText = connected ? "PILOTANDO!" : "Desconectado";
-            statusDiv.style.color = connected ? "#00ff00" : "yellow";
-            if (connected && car.physics) car.physics.wakeUp();
-        }
-
-        function update(dt) {
-            if (!car || !car.physics) return;
-
-            // Inputs
-            var throttle = figmin.getInput(figmin.InputCode.SELECT_RIGHT);
-            var stickX = figmin.getInput(figmin.InputCode.AXIS_X_RIGHT);
-            var stickY = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT);
-            var resetBtn = figmin.getInput(figmin.InputCode.THUMB_RIGHT);
-
-            // --- 1. RESOLVENDO A DIREÇÃO (O Segredo) ---
-            var fwd = car.transform.forward; // Pega o Z global do carro
-            var right = car.transform.right; // Pega o X global do carro
-            
-            var moveDir = { x:0, y:0, z:0 };
-
-            // Escolhe qual é a "Frente" baseada no MODO_EIXO
-            if (MODO_EIXO === 0) {
-                moveDir = fwd; // Padrão
-            } else if (MODO_EIXO === 1) {
-                moveDir = right; // Modelo feito de lado
-            } else if (MODO_EIXO === 2) {
-                moveDir = { x: -fwd.x, y: -fwd.y, z: -fwd.z }; // Invertido
-            }
-
-            // --- 2. ACELERAÇÃO E RÉ ---
-            var finalForce = 0;
-
-            // Se acelerar (Gatilho)
-            if (throttle > 0.05) {
-                finalForce = throttle * MOTOR_POWER;
-            }
-            // Se der Ré (Analógico pra trás)
-            else if (stickY < -0.2) {
-                finalForce = stickY * MOTOR_POWER; // stickY já é negativo, então inverte a força
-            }
-
-            // Aplica a força NA DIREÇÃO QUE O CARRO APONTA
-            if (Math.abs(finalForce) > 0.1) {
-                car.physics.applyForce({
-                    x: moveDir.x * finalForce,
-                    y: moveDir.y * finalForce, // Sobe ladeiras se precisar
-                    z: moveDir.z * finalForce
-                });
-            }
-
-            // --- 3. DIREÇÃO (TORQUE) ---
-            // Analógico X negativo vira pra esquerda, positivo pra direita
-            var steer = -stickX; 
-            if (Math.abs(steer) > 0.1) {
-                car.physics.applyTorque({
-                    x: 0, 
-                    y: steer * TURN_SPEED, 
-                    z: 0
-                });
-            }
-
-            // --- 4. ESTABILIDADE (Anti-Tombo) ---
-            // Se inclinar muito, força ele a ficar em pé
-            if (car.transform.up.y < 0.6) {
-                var rot = car.transform.rotation;
-                // Zera rotação X e Z suavemente
-                car.transform.rotation = { x: 0, y: rot.y, z: 0 };
-                // Zera velocidade angular pra não quicar
-                car.physics.setAngularVelocity({x:0, y:0, z:0});
-            }
-
-            // Reset
-            if (resetBtn) {
-                var cam = figmin.getCamera();
-                car.transform.position = {
-                    x: cam.transform.position.x + cam.transform.forward.x * 2,
-                    y: cam.transform.position.y,
-                    z: cam.transform.position.z + cam.transform.forward.z * 2
+        // Função de Vetor Local (Para o carro andar pra frente dele mesmo)
+        function getForwardVector(q) {
+            const x = q.x, y = q.y, z = q.z, w = q.w;
+            if (MODELO_DE_LADO) {
+                return { // Frente no Eixo X
+                    x: 1 - 2 * (y * y + z * z),
+                    y: 2 * (x * y + w * z),
+                    z: 2 * (x * z - w * y)
                 };
-                car.physics.setLinearVelocity({x:0, y:0, z:0});
+            } else {
+                return { // Frente no Eixo Z (Padrão)
+                    x: 2 * (x * z + w * y),
+                    y: 2 * (y * z - w * x),
+                    z: 1 - 2 * (x * x + y * y)
+                };
             }
         }
-    </script>
-</body>
-</html>
+
+        document.addEventListener("FigminReady", function() {
+            car = figmin
