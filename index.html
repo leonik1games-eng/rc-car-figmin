@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="figmin">
+    <title>SS Play RC Controller</title>
+    <style>
+        body { 
+            background-color: #1a1a1a; 
+            color: #00ff00; 
+            font-family: 'Courier New', monospace; 
+            text-align: center; 
+            padding-top: 50px;
+        }
+        .status { font-size: 24px; border: 2px solid #00ff00; padding: 10px; display: inline-block; }
+    </style>
+    <script>
+        let car;
+        let spawnPoint;
+        
+        // CONFIGURAÇÕES
+        const RESET_BUTTON = 1; // Botão B do controle
+        const HOLD_TIME_FRAMES = 90; // ~1.5 segundos para resetar
+        let holdCounter = 0;
+
+        // Quando o Figmin carregar a cena:
+        document.addEventListener("FigminReady", () => {
+            // BUSCA OS OBJETOS PELO NOME (Importante: renomeie no Figmin!)
+            car = figmin.findObjectByName("meu_carro");
+            spawnPoint = figmin.findObjectByName("spawn_point");
+
+            updateStatus("Sistema Iniciado!");
+            
+            // Inicia o loop de física
+            loop();
+        });
+
+        function loop() {
+            const gamepads = navigator.getGamepads();
+            
+            // Só roda se tiver controle e carro
+            if (gamepads[0] && car) {
+                const gp = gamepads[0];
+
+                // --- PILOTAGEM ---
+                // Gatilhos: R2 (btn 7) acelera, L2 (btn 6) ré
+                let throttle = gp.buttons[7].value - gp.buttons[6].value;
+                // Direção: Analógico Direito (eixo 2) ou Esquerdo (eixo 0)
+                let steer = gp.axes[2]; 
+
+                // Força para frente (respeitando a rotação do carro)
+                let forward = car.getForwardVector();
+                
+                // Zona morta para não andar sozinho
+                if (Math.abs(throttle) > 0.05) {
+                    // Multiplicador 0.5 define a potência. Aumente se o carro for pesado.
+                    car.applyImpulse({
+                        x: forward.x * throttle * 0.5,
+                        y: forward.y * throttle * 0.5,
+                        z: forward.z * throttle * 0.5
+                    });
+                }
+
+                // Curva (Torque)
+                if (Math.abs(steer) > 0.1) {
+                    car.setAngularVelocity({ x: 0, y: -steer * 2.5, z: 0 });
+                }
+
+                // --- RESET (SEGURAR B) ---
+                if (gp.buttons[RESET_BUTTON].pressed) {
+                    holdCounter++;
+                    updateStatus("Resetando em... " + (HOLD_TIME_FRAMES - holdCounter));
+                    
+                    if (holdCounter > HOLD_TIME_FRAMES) {
+                        doReset();
+                        holdCounter = 0;
+                    }
+                } else {
+                    holdCounter = 0;
+                    updateStatus("Pronto para Pilotar");
+                }
+            }
+            requestAnimationFrame(loop);
+        }
+
+        function doReset() {
+            // Para o carro totalmente
+            car.setLinearVelocity({ x: 0, y: 0, z: 0 });
+            car.setAngularVelocity({ x: 0, y: 0, z: 0 });
+
+            if (spawnPoint) {
+                let pos = spawnPoint.getPosition();
+                let rot = spawnPoint.getRotation();
+                pos.y += 0.2; // Levanta um pouco pra não travar no chão
+                car.setPosition(pos);
+                car.setRotation(rot);
+                updateStatus("RESET CONCLUÍDO!");
+            } else {
+                car.setPosition({x:0, y:1, z:0});
+            }
+        }
+
+        function updateStatus(text) {
+            document.getElementById("msg").innerText = text;
+        }
+    </script>
+</head>
+<body>
+    <div class="status">
+        SS PLAY EVENTOS<br>
+        RC SYSTEM V1.0
+    </div>
+    <p id="msg">Carregando...</p>
+    <p>Segure <b>'B'</b> para resetar.</p>
+</body>
+</html>
