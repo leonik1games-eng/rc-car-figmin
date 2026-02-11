@@ -183,7 +183,6 @@
     }
 
     document.addEventListener("FigminReady", function () {
-      // Garante modo espacial
       if (!figmin.isSpatialApp()) {
         figmin.requireSpatialApp();
         return;
@@ -191,8 +190,7 @@
 
       setStatus("Procurando objeto \"meu_carro\"...", "warn");
 
-      // Mesmo padrão que você usava
-      car = figmin.findObjectByName("meu_carro"); // função suportada na API oficial [web:1]
+      car = figmin.findObjectByName("meu_carro"); // [web:1]
 
       if (car) {
         setStatus("PRONTO! ⚡ \"meu_carro\" encontrado", "ok");
@@ -203,14 +201,13 @@
     });
 
     function setupCar() {
-      // Adiciona física básica de carro
       car.addComponent(figmin.ComponentType.PHYSICS, {
         mass: 2.0,
         drag: 0.2,
         angularDrag: 0.5,
         gravityStrength: 1.0,
         collisionDetectionMode: figmin.physics.CollisionDetectionMode.CONTINUOUS_DYNAMIC,
-        kinematic: true // começa parado
+        kinematic: true
       });
 
       car.addComponent(figmin.ComponentType.PHYSICS_MATERIAL, {
@@ -219,20 +216,18 @@
         dynamicFriction: 0.8
       });
 
-      // Habilita o menu de raio para conectar inputs
       figmin.enableInputConnect(
         "RC Car Controls",
         [
-          figmin.InputCode.SELECT_RIGHT,  // aceleração
-          figmin.InputCode.AXIS_Y_RIGHT,  // freio / ré
-          figmin.InputCode.AXIS_X_LEFT,   // direção
-          figmin.InputCode.THUMB_RIGHT    // reset
+          figmin.InputCode.SELECT_RIGHT,
+          figmin.InputCode.AXIS_Y_RIGHT,
+          figmin.InputCode.AXIS_X_LEFT,
+          figmin.InputCode.THUMB_RIGHT
         ],
         onInputConnectionChanged,
         car
-      );
+      ); // [web:1]
 
-      // Função de update
       figmin.setUpdateFunction(update);
     }
 
@@ -252,13 +247,12 @@
         return;
       }
 
-      // Inputs
       var accelIn = figmin.getInput(figmin.InputCode.SELECT_RIGHT);
       var brakeIn = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT);
       var steerIn = figmin.getInput(figmin.InputCode.AXIS_X_LEFT);
       var resetDown = figmin.getInput(figmin.InputCode.THUMB_RIGHT);
 
-      // Reset: coloca na frente da câmera
+      // Reset
       if (resetDown) {
         var camera = figmin.getCamera();
         var fwd = camera.transform.forward;
@@ -278,42 +272,6 @@
         return;
       }
 
-      // HUD simples de velocidade
+      // HUD velocidade
       var v = car.physics.velocity;
-      var speed = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-      outputEl.textContent = "Velocidade: " + speed.toFixed(2) + " m/s";
-
-      if (
-        Math.abs(accelIn) < 0.01 &&
-        Math.abs(brakeIn) < 0.01 &&
-        Math.abs(steerIn) < 0.01
-      ) {
-        return;
-      }
-
-      // Força pra frente (local Z)
-      var maxForwardForce = 15.0;
-      var forwardForce = accelIn * maxForwardForce;
-
-      // Freio / ré
-      var maxBrakeForce = 20.0;
-      if (brakeIn > 0.1) {
-        forwardForce -= brakeIn * maxBrakeForce;
-      } else if (brakeIn < -0.1) {
-        forwardForce += -brakeIn * (maxForwardForce * 0.5);
-      }
-
-      car.physics.applyForce({ x: 0, y: 0, z: forwardForce * dt });
-
-      // Direção: torque em Y
-      var maxSteerTorque = 8.0;
-      car.physics.applyTorque({
-        x: 0,
-        y: steerIn * maxSteerTorque * dt,
-        z: 0
-      });
-    }
-  </script>
-</body>
-
-</html>
+      var speed = Math.sq
