@@ -5,112 +5,108 @@
     <meta name="figmin">
     <title>RC Car SS Play</title>
     <style>
-        :root { --accent: #3b82f6; --bg: #020617; }
-        html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background-color: transparent; }
-        body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; text-align: center; color: white; }
+        :root { --accent: #3b82f6; --bg: #020617; --text-muted: #9ca3af; --ui-scale: 1.6; }
+        html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: transparent; }
+        body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; text-align: center; color: #f9fafb; }
         .card {
-            padding: 24px; border-radius: 20px;
+            padding: 24px 28px; border-radius: 20px;
             background: rgba(15, 23, 42, 0.95);
+            box-shadow: 0 18px 45px rgba(0, 0, 0, 0.9);
             border: 1px solid rgba(148, 163, 184, 0.35);
-            width: 350px;
+            max-width: 440px; transform: scale(var(--ui-scale));
         }
-        h1 { margin: 0; font-size: 22px; color: #3b82f6; }
-        .status { font-weight: bold; margin: 10px 0; color: yellow; }
+        h1 { margin: 0 0 8px; font-size: 26px; }
+        .controls { padding: 14px 16px; border-radius: 14px; background: rgba(59, 130, 246, 0.15); text-align: left; font-size: 14px; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h1>SS PLAY RC</h1>
-        <p id="status" class="status">Aguardando Figmin...</p>
-        <p style="font-size: 12px; color: #9ca3af;">Certifique-se que o objeto se chama: <b>meu_carro</b></p>
+        <h1>RC Car Control</h1>
+        <p id="output">Aguardando Conexão...</p>
+        <div class="controls">
+            <div><b>Gatilho:</b> Acelerar</div>
+            <div><b>Analógico:</b> Direção</div>
+            <div><b>Botão A:</b> Reset</div>
+        </div>
     </div>
 
     <script>
-        var car = null;
+        var plane = null; // Mantendo o nome 'plane' para ser fiel ao seu código original
 
-        // O FigminReady é o gatilho principal
         document.addEventListener("FigminReady", function() {
-            // Pequeno delay para garantir que a cena carregou
-            setTimeout(function() {
-                car = figmin.findObjectByName("meu_carro");
-
-                if (car) {
-                    initCar();
-                } else {
-                    document.getElementById('status').innerText = "ERRO: 'meu_carro' não encontrado";
-                    document.getElementById('status').style.color = "red";
-                }
-            }, 1000);
+            plane = figmin.findObjectByName("meu_carro");
+            if (plane) {
+                onPlaneStart(plane);
+            }
+            figmin.setUpdateFunction(update);
         });
 
-        function initCar() {
-            // 1. Configura física leve (Estilo Avião)
-            car.addComponent(figmin.ComponentType.PHYSICS, {
-                mass: 0.1,
+        function onPlaneStart(obj) {
+            // Física de carro (baseada no avião mas com gravidade 1.0)
+            obj.addComponent(figmin.ComponentType.PHYSICS, {
+                mass: 0.05,
                 drag: 1.0,
-                angularDrag: 2.0,
-                gravityStrength: 0.5,
+                angularDrag: 1.0,
+                gravityStrength: 1.0,
                 kinematic: false
             });
 
-            // 2. Habilita Conexão
-            figmin.enableInputConnect("Controle RC", [
+            // Ativa o RAIO exatamente como no seu código
+            figmin.enableInputConnect("RC Controls", [
                 figmin.InputCode.SELECT_RIGHT,
                 figmin.InputCode.AXIS_Y_RIGHT,
                 figmin.InputCode.AXIS_X_RIGHT,
                 figmin.InputCode.BUTTON_1
-            ], function(connected) {
-                var s = document.getElementById('status');
-                if(connected) {
-                    s.innerText = "CONECTADO!";
-                    s.style.color = "#4ade80";
-                } else {
-                    s.innerText = "DESCONECTADO";
-                    s.style.color = "yellow";
-                }
-            }, car);
+            ], onInputConnectionChanged, plane);
+        }
 
-            document.getElementById('status').innerText = "PRONTO! CLIQUE NO RAIO ⚡";
-            document.getElementById('status').style.color = "cyan";
-            
-            figmin.setUpdateFunction(update);
+        function onInputConnectionChanged(connected, playerId) {
+            if (connected) {
+                document.getElementById('output').innerText = "CONECTADO!";
+                plane.physics.kinematic = false;
+            }
         }
 
         function update(dt) {
-            if (!car || !car.physics) return;
+            if (!plane || !plane.physics) return;
 
-            var throttle = figmin.getInput(figmin.InputCode.SELECT_RIGHT);
-            var steer = -figmin.getInput(figmin.InputCode.AXIS_X_RIGHT);
-            var stickY = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT);
-            var btnA = figmin.getInput(figmin.InputCode.BUTTON_1);
+            var throttleIn = figmin.getInput(figmin.InputCode.SELECT_RIGHT);
+            var pitchIn = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT); // Para Ré
+            var rollIn = -figmin.getInput(figmin.InputCode.AXIS_X_RIGHT); // Para Curva
+            var resetDown = figmin.getInput(figmin.InputCode.BUTTON_1);
 
             // Reset (Botão A)
-            if (btnA) {
-                var cam = figmin.getCamera();
-                car.transform.position = {
-                    x: cam.transform.position.x + cam.transform.forward.x * 2,
-                    y: cam.transform.position.y - 0.5,
-                    z: cam.transform.position.z + cam.transform.forward.z * 2
+            if (resetDown) {
+                var camera = figmin.getCamera();
+                plane.transform.position = {
+                    x: camera.transform.position.x + camera.transform.forward.x * 1.5,
+                    y: camera.transform.position.y - 0.5,
+                    z: camera.transform.position.z + camera.transform.forward.z * 1.5
                 };
-                car.physics.setLinearVelocity({x:0, y:0, z:0});
+                plane.physics.setLinearVelocity({x:0, y:0, z:0});
                 return;
             }
 
-            var forward = car.transform.forward;
-            var finalThrottle = (stickY < -0.2) ? stickY : throttle;
+            // Força de tração (Usa o Forward do objeto)
+            var forward = plane.transform.forward;
+            var finalThrottle = (pitchIn < -0.2) ? pitchIn : throttleIn;
+            var thrustPower = 15.0;
 
-            // Movimento simples
             if (Math.abs(finalThrottle) > 0.05) {
-                car.physics.applyForce({
-                    x: forward.x * finalThrottle * 15.0,
-                    y: forward.y * finalThrottle * 15.0,
-                    z: forward.z * finalThrottle * 15.0
+                plane.physics.applyForce({
+                    x: forward.x * finalThrottle * thrustPower,
+                    y: forward.y * finalThrottle * thrustPower,
+                    z: forward.z * finalThrottle * thrustPower
                 });
             }
 
-            // Curva
-            if (Math.abs(steer) > 0.1) {
-                car.physics.applyTorque({ x: 0, y: steer * 2.0, z: 0 });
+            // Curva (Usa o eixo Y para girar o carro no chão)
+            if (Math.abs(rollIn) > 0.1) {
+                plane.physics.applyTorque({
+                    x: 0,
+                    y: rollIn * 2.0,
+                    z: 0
+                });
             }
         }
     </script>
