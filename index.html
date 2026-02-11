@@ -1,185 +1,305 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SS Play RC - Clean</title>
+    <title>SS Play RC - Final</title>
     <meta name="figmin">
     <style>
-        /* ESTILO LIMPO - Só o essencial */
-        :root { --accent: #00ff00; --bg: #020617; --text: #e2e8f0; }
+        /* CSS ROBUSTO PARA INTERAÇÃO */
         body {
-            font-family: system-ui, sans-serif;
+            font-family: Arial, sans-serif;
             background: transparent; /* Invisível */
-            color: var(--text);
             margin: 0;
             overflow: hidden;
-            /* Garante que o laser atravesse tudo, menos os botões */
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            /* O SEGREDO: Deixa o laser passar por tudo, MENOS pelos botões */
             pointer-events: none; 
         }
 
-        /* Cartão de Instruções (Desaparece ao conectar se quiser) */
-        .card {
-            position: fixed;
-            top: 20px; left: 20px;
+        /* Status no topo */
+        .status-card {
+            margin-top: 20px;
             background: rgba(0, 0, 0, 0.8);
-            padding: 20px;
-            border-radius: 15px;
-            border: 1px solid #333;
-            max-width: 300px;
-            pointer-events: auto; /* Permite clicar aqui */
-        }
-        h1 { margin: 0 0 10px; color: var(--accent); font-size: 18px; }
-        .row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #333; font-size: 14px; }
-        
-        /* Botão de Config no canto inferior */
-        .config-btn {
-            position: fixed; bottom: 20px; right: 20px;
-            background: var(--accent); color: #000;
-            padding: 10px 20px; border-radius: 30px;
-            font-weight: bold; cursor: pointer; border: none;
-            pointer-events: auto;
-            z-index: 999;
+            color: #00ff00;
+            padding: 15px 25px;
+            border-radius: 30px;
+            border: 2px solid #00ff00;
+            font-weight: bold;
+            font-size: 18px;
+            text-align: center;
+            pointer-events: auto; /* Permite clicar se precisar */
         }
 
-        /* Painel de Configuração */
-        #configPanel {
-            display: none; position: fixed; top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            background: #1e293b; padding: 20px; border-radius: 15px;
-            width: 300px; z-index: 1000; border: 1px solid var(--accent);
-            pointer-events: auto;
+        /* Botão de Ajustes (Fixo na direita) */
+        .btn-config {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: #00ff00;
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            pointer-events: auto; /* IMPORTANTE: Permite clicar */
+            z-index: 9999;
         }
-        .slider-box { margin-bottom: 15px; }
-        input[type=range] { width: 100%; accent-color: var(--accent); }
+
+        /* Menu de Ajustes */
+        .panel-config {
+            display: none; /* Começa escondido */
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: #222;
+            padding: 25px;
+            border-radius: 15px;
+            border: 2px solid #00ff00;
+            width: 300px;
+            color: white;
+            z-index: 10000;
+            pointer-events: auto; /* IMPORTANTE: Permite interagir */
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+        }
+
+        .slider-row { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 5px; font-size: 14px; }
+        input[type=range] { width: 100%; accent-color: #00ff00; cursor: pointer; height: 20px; }
+        
+        .btn-close {
+            width: 100%; padding: 12px; background: #444; color: white; border: none; font-weight: bold; cursor: pointer; border-radius: 8px;
+        }
     </style>
 </head>
 <body>
 
-    <div class="card" id="infoCard">
-        <h1>SS PLAY RC</h1>
-        <div class="row"><span>Conectar</span> <span>Clique no Raio ⚡</span></div>
-        <div class="row"><span>Acelerar</span> <span>Gatilho R2</span></div>
-        <div class="row"><span>Ré</span> <span>Analógico Baixo</span></div>
-        <div class="row"><span>Reset</span> <span>Clique R3</span></div>
-        <div id="status" style="margin-top:10px; color: yellow; font-size: 12px;">Procurando 'meu_carro'...</div>
+    <div class="status-card" id="statusDisplay">
+        INICIANDO SISTEMA...
     </div>
 
-    <button class="config-btn" onclick="toggleConfig()">AJUSTES</button>
+    <button class="btn-config" onclick="toggleMenu()">⚙️ AJUSTES</button>
 
-    <div id="configPanel">
-        <h3 style="margin-top:0; color:white;">Ajuste Fino</h3>
+    <div class="panel-config" id="menuPanel">
+        <h3 style="margin-top:0; text-align:center; color:#00ff00;">TUNING SS PLAY</h3>
         
-        <div class="slider-box">
-            <label style="color:white">Força Motor: <span id="valSpeed">150</span></label>
-            <input type="range" id="sliderSpeed" min="50" max="300" step="10" value="150">
+        <div class="slider-row">
+            <label>Força Motor: <span id="txtMotor">150</span></label>
+            <input type="range" id="rngMotor" min="50" max="300" step="10" value="150">
         </div>
 
-        <div class="slider-box">
-            <label style="color:white">Força Curva: <span id="valTurn">20</span></label>
-            <input type="range" id="sliderTurn" min="5" max="50" step="1" value="20">
+        <div class="slider-row">
+            <label>Curva: <span id="txtCurva">25</span></label>
+            <input type="range" id="rngCurva" min="5" max="50" step="5" value="25">
         </div>
 
-        <div class="slider-box">
-            <label style="color:white">Gravidade: <span id="valGrav">3.0</span></label>
-            <input type="range" id="sliderGrav" min="1.0" max="10.0" step="0.5" value="3.0">
-        </div>
-        
-        <div class="slider-box">
-            <label style="color:white; display:flex; align-items:center;">
-                <input type="checkbox" id="checkAxis" style="width:20px; height:20px;"> 
-                <span style="margin-left:10px">Inverter Eixo (Lado)</span>
-            </label>
+        <div class="slider-row">
+            <label>Gravidade: <span id="txtGrav">3.0</span></label>
+            <input type="range" id="rngGrav" min="1.0" max="10.0" step="0.5" value="3.0">
         </div>
 
-        <button onclick="toggleConfig()" style="width:100%; padding:10px; background:#000; color:#fff; border:none; cursor:pointer;">FECHAR</button>
+        <div class="slider-row" style="display:flex; align-items:center; gap:10px;">
+            <input type="checkbox" id="chkEixo" style="width:25px; height:25px;">
+            <label style="margin:0;">Inverter Lado (Drift)</label>
+        </div>
+
+        <button class="btn-close" onclick="toggleMenu()">FECHAR MENU</button>
     </div>
 
     <script>
-        // --- VARIÁVEIS GLOBAIS ---
+        // --- VARIÁVEIS DO SISTEMA ---
         let car = null;
         let isConnected = false;
+        let searchInterval = null; // O Radar
 
-        // Referências aos Sliders
-        const sliderSpeed = document.getElementById('sliderSpeed');
-        const sliderTurn = document.getElementById('sliderTurn');
-        const sliderGrav = document.getElementById('sliderGrav');
-        const checkAxis = document.getElementById('checkAxis');
+        // --- INTERFACE (UI) ---
+        const statusDisplay = document.getElementById("statusDisplay");
+        const menuPanel = document.getElementById("menuPanel");
         
-        // Atualiza números na tela ao mexer no slider
-        sliderSpeed.oninput = () => document.getElementById('valSpeed').innerText = sliderSpeed.value;
-        sliderTurn.oninput = () => document.getElementById('valTurn').innerText = sliderTurn.value;
-        sliderGrav.oninput = () => {
-            document.getElementById('valGrav').innerText = sliderGrav.value;
-            if(car && car.physics) car.physics.gravityStrength = parseFloat(sliderGrav.value);
+        // Sliders
+        const rngMotor = document.getElementById("rngMotor");
+        const rngCurva = document.getElementById("rngCurva");
+        const rngGrav = document.getElementById("rngGrav");
+        const chkEixo = document.getElementById("chkEixo");
+
+        // Atualiza textos ao mexer nos sliders
+        rngMotor.oninput = () => document.getElementById("txtMotor").innerText = rngMotor.value;
+        rngCurva.oninput = () => document.getElementById("txtCurva").innerText = rngCurva.value;
+        rngGrav.oninput = () => {
+            document.getElementById("txtGrav").innerText = rngGrav.value;
+            // Atualiza gravidade em tempo real se o carro existir
+            if(car && car.physics) car.physics.gravityStrength = parseFloat(rngGrav.value);
         };
 
-        function toggleConfig() {
-            const p = document.getElementById('configPanel');
-            p.style.display = p.style.display === 'block' ? 'none' : 'block';
+        // Função de Abrir/Fechar Menu
+        function toggleMenu() {
+            if (menuPanel.style.display === "block") {
+                menuPanel.style.display = "none";
+            } else {
+                menuPanel.style.display = "block";
+            }
         }
 
-        // --- INICIALIZAÇÃO ---
-        document.addEventListener("FigminReady", init);
-
-        function init() {
-            if (!figmin.isSpatialApp()) { figmin.requireSpatialApp(); return; }
-
-            car = figmin.findObjectByName("meu_carro");
-
-            if (!car) {
-                document.getElementById("status").innerText = "ERRO: Renomeie o objeto 3D para 'meu_carro'";
-                document.getElementById("status").style.color = "red";
-                setTimeout(init, 2000); // Tenta de novo
+        // --- INÍCIO DO FIGMIN ---
+        document.addEventListener("FigminReady", () => {
+            if (!figmin.isSpatialApp()) {
+                figmin.requireSpatialApp();
                 return;
             }
 
-            document.getElementById("status").innerText = "Pronto! Aponte para o carro.";
-            document.getElementById("status").style.color = "#00ff00";
+            statusDisplay.innerText = "PROCURANDO 'meu_carro'...";
+            statusDisplay.style.color = "yellow";
 
-            // CONFIGURAÇÃO INICIAL DE FÍSICA
-            setupPhysics(car);
+            // Inicia o Radar (Tenta achar o carro a cada 1 segundo)
+            searchInterval = setInterval(searchForCar, 1000);
+        });
 
-            // CRIA O RAIO DE CONEXÃO
-            figmin.enableInputConnect("Pilotar", [
-                figmin.InputCode.SELECT_RIGHT,
-                figmin.InputCode.AXIS_Y_RIGHT,
-                figmin.InputCode.AXIS_X_RIGHT,
-                figmin.InputCode.THUMB_RIGHT
-            ], onConnect, car);
+        function searchForCar() {
+            // Tenta achar
+            car = figmin.findObjectByName("meu_carro");
 
-            figmin.setUpdateFunction(update);
+            if (car) {
+                // ACHOU! Para o radar.
+                clearInterval(searchInterval);
+                statusDisplay.innerText = "CARRO ENCONTRADO! ⚡";
+                statusDisplay.style.color = "#00ff00";
+                
+                // Configura o carro
+                setupCar();
+            } else {
+                // Não achou, continua procurando...
+                console.log("Procurando meu_carro...");
+            }
         }
 
-        function setupPhysics(obj) {
-            // Física "Pesada" para RC (pra não voar)
-            obj.addComponent(figmin.ComponentType.PHYSICS, {
-                mass: 8.0,            // Bem pesado
-                drag: 2.0,            // Freia rápido ao soltar (como motor elétrico)
-                angularDrag: 4.0,     // Estável nas curvas
-                gravityStrength: 3.0, // Gravidade 3x pra colar no chão
+        function setupCar() {
+            // 1. CONFIGURA A FÍSICA
+            car.addComponent(figmin.ComponentType.PHYSICS, {
+                mass: 5.0,
+                drag: 2.0,
+                angularDrag: 4.0,
+                gravityStrength: parseFloat(rngGrav.value),
                 collisionDetectionMode: figmin.physics.CollisionDetectionMode.CONTINUOUS_DYNAMIC,
-                kinematic: false
+                kinematic: false 
             });
 
-            // Pneus
-            obj.addComponent(figmin.ComponentType.PHYSICS_MATERIAL, {
-                bounciness: 0.0,      // Zero quique
-                staticFriction: 0.5,  // Atrito médio
-                dynamicFriction: 0.4
+            car.addComponent(figmin.ComponentType.PHYSICS_MATERIAL, {
+                bounciness: 0.0,
+                staticFriction: 0.6,
+                dynamicFriction: 0.5
             });
+
+            // 2. ATIVA O RAIO DE CONEXÃO
+            // Isso cria o ícone em cima do carro automaticamente
+            figmin.enableInputConnect("Pilotar RC", [
+                figmin.InputCode.SELECT_RIGHT, // Gatilho
+                figmin.InputCode.AXIS_Y_RIGHT, // Ré
+                figmin.InputCode.AXIS_X_RIGHT, // Lados
+                figmin.InputCode.THUMB_RIGHT   // Reset
+            ], onConnect, car);
+
+            // 3. INICIA O LOOP DE CONTROLE
+            figmin.setUpdateFunction(update);
         }
 
         function onConnect(connected) {
             isConnected = connected;
-            const status = document.getElementById("status");
-            
             if (connected) {
-                status.innerText = "CONECTADO!";
+                statusDisplay.innerText = "CONECTADO: PILOTE AGORA";
+                statusDisplay.style.backgroundColor = "#004400";
+                
                 // Acorda a física
                 if(car.physics) {
                     car.physics.kinematic = false;
                     car.physics.wakeUp();
                 }
             } else {
-                status.innerText = "Desconect
+                statusDisplay.innerText = "DESCONECTADO";
+                statusDisplay.style.backgroundColor = "#440000";
+            }
+        }
+
+        function update(dt) {
+            if (!car || !isConnected || !car.physics) return;
+
+            // --- LEITURA DOS COMANDOS ---
+            let throttle = figmin.getInput(figmin.InputCode.SELECT_RIGHT);
+            let steer = -figmin.getInput(figmin.InputCode.AXIS_X_RIGHT);
+            let stickY = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT);
+            let resetBtn = figmin.getInput(figmin.InputCode.THUMB_RIGHT);
+
+            // Ré
+            let isReversing = false;
+            if (stickY < -0.2) {
+                throttle = Math.abs(stickY);
+                isReversing = true;
+            }
+
+            // Valores do Menu
+            const MOTOR = parseFloat(rngMotor.value);
+            const CURVA = parseFloat(rngCurva.value);
+
+            // --- MOVIMENTO ---
+            let forward = car.transform.forward;
+            let right = car.transform.right;
+            
+            // Corrige se estiver andando de lado
+            let moveDir = chkEixo.checked ? right : forward;
+
+            // Acelerar
+            if (throttle > 0.05) {
+                let direction = isReversing ? -1 : 1;
+                let force = {
+                    x: moveDir.x * throttle * MOTOR * direction * dt * 60,
+                    y: moveDir.y * throttle * MOTOR * direction * dt * 60,
+                    z: moveDir.z * throttle * MOTOR * direction * dt * 60
+                };
+                car.physics.applyForce(force);
+            }
+
+            // Curvar
+            if (Math.abs(steer) > 0.1) {
+                car.physics.applyTorque({
+                    x: 0,
+                    y: steer * CURVA * dt * 60,
+                    z: 0
+                });
+            }
+
+            // Anti-Tombo
+            if (car.transform.up.y < 0.5) {
+                car.physics.applyTorque({ x: forward.x * 10, y: 0, z: forward.z * 10 });
+            }
+
+            // Reset
+            if (resetBtn) doReset();
+        }
+
+        function doReset() {
+            car.physics.setLinearVelocity({x:0, y:0, z:0});
+            car.physics.setAngularVelocity({x:0, y:0, z:0});
+
+            let cam = figmin.getCamera();
+            let fwd = cam.transform.forward;
+            let pos = cam.transform.position;
+
+            // Teleporta
+            car.transform.position = {
+                x: pos.x + fwd.x * 2.0,
+                y: pos.y - 0.5, 
+                z: pos.z + fwd.z * 2.0
+            };
+            if(car.transform.position.y < 0.2) car.transform.position.y = 0.5;
+
+            car.transform.rotation = { x:0, y: cam.transform.rotation.y, z:0 };
+        }
+    </script>
+</body>
+</html>
