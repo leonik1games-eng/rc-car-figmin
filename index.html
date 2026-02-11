@@ -2,156 +2,117 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="figmin">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SS Play RC Debugger</title>
+    <meta name="figmin"> <title>SS Play Debug V2</title>
     <style>
-        body {
-            background-color: #000;
-            color: #0f0; /* Verde Hacker */
-            font-family: monospace;
-            font-size: 16px;
-            padding: 20px;
-            text-align: left;
-        }
-        .hud {
-            border: 2px solid #0f0;
-            padding: 15px;
-            margin-top: 10px;
-        }
-        h2 { margin: 0; color: #fff; }
-        .red { color: #ff3333; }
-        .yellow { color: #ffff33; }
+        body { background: #000; color: #0f0; font-family: monospace; font-size: 18px; text-align: center; }
+        button { font-size: 24px; padding: 20px; background: #0f0; color: #000; border: none; cursor: pointer; margin: 20px; }
+        .box { border: 2px solid #555; padding: 10px; margin: 10px; display: inline-block; width: 45%; }
+        .val { font-size: 24px; font-weight: bold; color: white; }
     </style>
+</head>
+<body>
+
+    <h1>TESTE DE CONTROLE</h1>
+    
+    <button id="btnStart" onclick="iniciarSistema()">CLIQUE AQUI PARA INICIAR</button>
+
+    <div id="status">Aguardando clique...</div>
+
+    <div class="box">
+        Gatilho (Acelerar)<br>
+        <span id="valTrigger" class="val">0.00</span>
+    </div>
+    
+    <div class="box">
+        Analógico (Direção)<br>
+        <span id="valSteer" class="val">0.00</span>
+    </div>
+
+    <div class="box">
+        Botões (Reset)<br>
+        <span id="valBtn" class="val">---</span>
+    </div>
+
+    <p>Heartbeat: <span id="heartbeat">0</span></p>
+
     <script>
+        let rodando = false;
         let car = null;
-        let spawnPoint = null;
-        let debugText = "";
+        let counter = 0;
 
-        // Tenta rodar assim que o Figmin estiver pronto
-        document.addEventListener("FigminReady", init);
-
-        function init() {
-            // Tenta achar o carro
+        // Tenta conectar no Figmin (mas não trava se falhar)
+        document.addEventListener("FigminReady", () => {
             car = figmin.findObjectByName("meu_carro");
-            spawnPoint = figmin.findObjectByName("spawn_point");
+            document.getElementById("status").innerText = car ? "CARRO CONECTADO!" : "CARRO NÃO ENCONTRADO (Verifique o nome)";
+        });
 
-            if (!car) {
-                log("ERRO: Objeto 'meu_carro' NÃO encontrado!");
-            } else {
-                log("SUCESSO: Carro conectado!");
-            }
-
-            // Inicia o loop visual e físico
+        function iniciarSistema() {
+            document.getElementById("btnStart").style.display = "none";
+            document.getElementById("status").innerText = "SISTEMA RODANDO... MEXA O CONTROLE!";
+            rodando = true;
             loop();
         }
 
         function loop() {
-            // 1. Captura os controles
+            if (!rodando) return;
+
+            // 1. Contador visual (pra saber se o script tá vivo)
+            counter++;
+            document.getElementById("heartbeat").innerText = counter;
+
+            // 2. Leitura dos Controles
             const gamepads = navigator.getGamepads();
-            
-            // Pega o primeiro controle ativo (pode ser o da esquerda ou direita)
-            // No Quest, geralmente gamepads[0] e [1] são as mãos.
             let gp = null;
-            for (let i = 0; i < gamepads.length; i++) {
+
+            // Procura qualquer controle ativo
+            for (let i = 0; i < 4; i++) {
                 if (gamepads[i] && gamepads[i].buttons.length > 0) {
                     gp = gamepads[i];
-                    break;
+                    break; 
                 }
             }
 
             if (gp) {
-                // --- MAPEAMENTO QUEST (Geralmente) ---
-                // Botão 0 = Gatilho Indicador (Trigger)
-                // Botão 1 = Gatilho de Mão (Grip)
-                // Botão 4 = A ou X
-                // Botão 5 = B ou Y
-                // Eixo 2 = Analógico Horizontal
-                // Eixo 3 = Analógico Vertical
+                // --- ATUALIZA A TELA (DEBUG) ---
+                
+                // Gatilho (Botão 0 no Quest / 7 no Xbox)
+                let trigger = gp.buttons[0] ? gp.buttons[0].value : 0;
+                document.getElementById("valTrigger").innerText = trigger.toFixed(2);
 
-                // Lê os valores
-                let trigger = gp.buttons[0] ? gp.buttons[0].value : 0; // Acelerar
-                let grip = gp.buttons[1] ? gp.buttons[1].value : 0;    // Freio/Ré
-                let steer = gp.axes[2] || 0;                           // Direção
-                let btnA = gp.buttons[4] ? gp.buttons[4].pressed : false; // Reset 1
-                let btnB = gp.buttons[5] ? gp.buttons[5].pressed : false; // Reset 2
+                // Direção (Eixo 2 ou 0)
+                let steer = gp.axes[2] || gp.axes[0] || 0;
+                document.getElementById("valSteer").innerText = steer.toFixed(2);
 
-                // --- ATUALIZA A TELA (HUD) ---
-                // Isso vai te mostrar se o controle tá funcionando!
-                let statusHtml = `
-                    <div class="hud">
-                    STATUS DO CONTROLE:<br>
-                    Acelerar (Trigger): ${trigger.toFixed(2)}<br>
-                    Freio (Grip): ${grip.toFixed(2)}<br>
-                    Direção (Analógico): ${steer.toFixed(2)}<br>
-                    Botão A (Reset?): ${btnA ? "PRESSIONADO" : "solto"}<br>
-                    Botão B (Reset?): ${btnB ? "PRESSIONADO" : "solto"}<br>
-                    </div>
-                `;
-                document.getElementById("debug").innerHTML = statusHtml;
+                // Botão A/B (Reset)
+                let btnA = gp.buttons[4] ? gp.buttons[4].pressed : false;
+                let btnB = gp.buttons[1] ? gp.buttons[1].pressed : false; // As vezes B é 1
+                
+                if (btnA) document.getElementById("valBtn").innerText = "A (Press)";
+                else if (btnB) document.getElementById("valBtn").innerText = "B (Press)";
+                else document.getElementById("valBtn").innerText = "---";
 
-                // --- FÍSICA DO CARRO ---
+                // --- COMANDO PRO CARRO ---
                 if (car) {
-                    let throttle = trigger - grip; // Frente - Ré
                     let forward = car.getForwardVector();
-
-                    // Zona morta
-                    if (Math.abs(throttle) > 0.05) {
-                        // Força (Ajuste o 0.5 se estiver lento/rápido)
-                        car.applyImpulse({
-                            x: forward.x * throttle * 0.5,
-                            y: forward.y * throttle * 0.5,
-                            z: forward.z * throttle * 0.5
+                    // Simples pra teste: Acelera se gatilho > 0.1
+                    if (trigger > 0.1) {
+                         car.applyImpulse({
+                            x: forward.x * trigger * 0.5,
+                            y: forward.y * trigger * 0.5,
+                            z: forward.z * trigger * 0.5
                         });
                     }
-
-                    // Curva
                     if (Math.abs(steer) > 0.1) {
-                        car.setAngularVelocity({ x: 0, y: -steer * 3.0, z: 0 });
-                    }
-
-                    // Reset (Se apertar A ou B)
-                    if (btnA || btnB) {
-                        resetCar();
+                        car.setAngularVelocity({ x: 0, y: -steer * 3, z: 0 });
                     }
                 }
+
             } else {
-                document.getElementById("debug").innerHTML = "<div class='yellow'>Aguardando input do controle...<br>(Aperte algum botão pra acordar)</div>";
+                document.getElementById("status").innerText = "NENHUM CONTROLE DETECTADO. APERTE BOTÕES!";
             }
 
             requestAnimationFrame(loop);
         }
-
-        function resetCar() {
-            if (!car) return;
-            
-            // Para o carro
-            car.setLinearVelocity({ x: 0, y: 0, z: 0 });
-            car.setAngularVelocity({ x: 0, y: 0, z: 0 });
-
-            // Move
-            if (spawnPoint) {
-                let pos = spawnPoint.getPosition();
-                let rot = spawnPoint.getRotation();
-                pos.y += 0.2;
-                car.setPosition(pos);
-                car.setRotation(rot);
-            } else {
-                // Se não tiver spawn point, joga pro alto no centro
-                car.setPosition({x:0, y:1, z:0});
-            }
-        }
-
-        function log(msg) {
-            console.log(msg);
-            let el = document.getElementById("logs");
-            if (el) el.innerHTML += msg + "<br>";
-        }
     </script>
-</head>
-<body>
-    <h2>SS PLAY RC - DEBUG</h2>
-    <div id="logs" class="red"></div>
-    <div id="debug">Carregando telemetria...</div>
 </body>
 </html>
