@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="figmin">
-    <title>SS Play RC</title>
+    <title>RC Car SS Play</title>
     <style>
         :root { --accent: #3b82f6; --bg: #020617; }
         html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background-color: transparent; }
@@ -15,54 +15,66 @@
             width: 350px;
         }
         h1 { margin: 0; font-size: 22px; color: #3b82f6; }
-        p { font-size: 14px; color: #9ca3af; }
+        .status { font-weight: bold; margin: 10px 0; color: yellow; }
     </style>
 </head>
 <body>
     <div class="card">
         <h1>SS PLAY RC</h1>
-        <p id="status">Se o raio não aparecer,<br>clique em <b>REFRESH</b> no navegador.</p>
+        <p id="status" class="status">Aguardando Figmin...</p>
+        <p style="font-size: 12px; color: #9ca3af;">Certifique-se que o objeto se chama: <b>meu_carro</b></p>
     </div>
 
     <script>
         var car = null;
 
-        // Tenta carregar ASSIM que o Figmin der o sinal
+        // O FigminReady é o gatilho principal
         document.addEventListener("FigminReady", function() {
-            car = figmin.findObjectByName("meu_carro");
+            // Pequeno delay para garantir que a cena carregou
+            setTimeout(function() {
+                car = figmin.findObjectByName("meu_carro");
 
-            if (car) {
-                // Injeta física
-                car.addComponent(figmin.ComponentType.PHYSICS, {
-                    mass: 1.0,
-                    drag: 1.5,
-                    angularDrag: 2.5,
-                    gravityStrength: 2.0,
-                    kinematic: false
-                });
-
-                // Liga o Raio
-                figmin.enableInputConnect("Controle RC", [
-                    figmin.InputCode.SELECT_RIGHT,
-                    figmin.InputCode.AXIS_Y_RIGHT,
-                    figmin.InputCode.AXIS_X_RIGHT,
-                    figmin.InputCode.BUTTON_1
-                ], function(connected) {
-                    if(connected) {
-                        document.getElementById('status').innerText = "CONECTADO!";
-                        if (car.physics) car.physics.wakeUp();
-                    }
-                }, car);
-
-                document.getElementById('status').innerText = "CARRO PRONTO! CLIQUE NO RAIO ⚡";
-                document.getElementById('status').style.color = "#4ade80";
-            } else {
-                document.getElementById('status').innerText = "ERRO: 'meu_carro' não encontrado.\nRenomeie e dê Refresh.";
-                document.getElementById('status').style.color = "#f87171";
-            }
-
-            figmin.setUpdateFunction(update);
+                if (car) {
+                    initCar();
+                } else {
+                    document.getElementById('status').innerText = "ERRO: 'meu_carro' não encontrado";
+                    document.getElementById('status').style.color = "red";
+                }
+            }, 1000);
         });
+
+        function initCar() {
+            // 1. Configura física leve (Estilo Avião)
+            car.addComponent(figmin.ComponentType.PHYSICS, {
+                mass: 0.1,
+                drag: 1.0,
+                angularDrag: 2.0,
+                gravityStrength: 0.5,
+                kinematic: false
+            });
+
+            // 2. Habilita Conexão
+            figmin.enableInputConnect("Controle RC", [
+                figmin.InputCode.SELECT_RIGHT,
+                figmin.InputCode.AXIS_Y_RIGHT,
+                figmin.InputCode.AXIS_X_RIGHT,
+                figmin.InputCode.BUTTON_1
+            ], function(connected) {
+                var s = document.getElementById('status');
+                if(connected) {
+                    s.innerText = "CONECTADO!";
+                    s.style.color = "#4ade80";
+                } else {
+                    s.innerText = "DESCONECTADO";
+                    s.style.color = "yellow";
+                }
+            }, car);
+
+            document.getElementById('status').innerText = "PRONTO! CLIQUE NO RAIO ⚡";
+            document.getElementById('status').style.color = "cyan";
+            
+            figmin.setUpdateFunction(update);
+        }
 
         function update(dt) {
             if (!car || !car.physics) return;
@@ -72,6 +84,7 @@
             var stickY = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT);
             var btnA = figmin.getInput(figmin.InputCode.BUTTON_1);
 
+            // Reset (Botão A)
             if (btnA) {
                 var cam = figmin.getCamera();
                 car.transform.position = {
@@ -86,16 +99,18 @@
             var forward = car.transform.forward;
             var finalThrottle = (stickY < -0.2) ? stickY : throttle;
 
+            // Movimento simples
             if (Math.abs(finalThrottle) > 0.05) {
                 car.physics.applyForce({
-                    x: forward.x * finalThrottle * 40.0,
-                    y: forward.y * finalThrottle * 40.0,
-                    z: forward.z * finalThrottle * 40.0
+                    x: forward.x * finalThrottle * 15.0,
+                    y: forward.y * finalThrottle * 15.0,
+                    z: forward.z * finalThrottle * 15.0
                 });
             }
 
+            // Curva
             if (Math.abs(steer) > 0.1) {
-                car.physics.applyTorque({ x: 0, y: steer * 4.0, z: 0 });
+                car.physics.applyTorque({ x: 0, y: steer * 2.0, z: 0 });
             }
         }
     </script>
