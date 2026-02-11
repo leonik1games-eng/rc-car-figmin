@@ -1,117 +1,287 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="figmin"> <title>SS Play Debug V2</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SS Play RC Car</title>
+    <meta name="figmin">
     <style>
-        body { background: #000; color: #0f0; font-family: monospace; font-size: 18px; text-align: center; }
-        button { font-size: 24px; padding: 20px; background: #0f0; color: #000; border: none; cursor: pointer; margin: 20px; }
-        .box { border: 2px solid #555; padding: 10px; margin: 10px; display: inline-block; width: 45%; }
-        .val { font-size: 24px; font-weight: bold; color: white; }
+        /* ESTILO IGUAL AO DO AVIÃO (FICA PROFISSIONAL) */
+        :root { --accent: #00ff00; --bg: #020617; --text: #e2e8f0; }
+        body {
+            font-family: system-ui, sans-serif;
+            background: rgba(0,0,0,0.8);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        .card {
+            background: rgba(15, 23, 42, 0.95);
+            padding: 24px;
+            border-radius: 20px;
+            border: 1px solid #333;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        h1 { margin: 0 0 10px; color: var(--accent); }
+        .controls-list { text-align: left; margin-top: 20px; font-size: 14px; }
+        .row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #333; }
+        .key { background: #333; padding: 2px 8px; border-radius: 4px; color: #fff; font-family: monospace; }
+        
+        /* Botão de Config no canto */
+        .config-btn {
+            position: fixed; bottom: 20px; right: 20px;
+            background: var(--accent); color: #000;
+            padding: 10px 20px; border-radius: 30px;
+            font-weight: bold; cursor: pointer; border: none;
+        }
+
+        /* Modal de Configuração */
+        #configPanel {
+            display: none; position: fixed; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: #1e293b; padding: 20px; border-radius: 15px;
+            width: 300px; z-index: 100; border: 1px solid var(--accent);
+        }
+        .slider-box { margin-bottom: 15px; }
+        input[type=range] { width: 100%; accent-color: var(--accent); }
     </style>
 </head>
 <body>
 
-    <h1>TESTE DE CONTROLE</h1>
-    
-    <button id="btnStart" onclick="iniciarSistema()">CLIQUE AQUI PARA INICIAR</button>
-
-    <div id="status">Aguardando clique...</div>
-
-    <div class="box">
-        Gatilho (Acelerar)<br>
-        <span id="valTrigger" class="val">0.00</span>
-    </div>
-    
-    <div class="box">
-        Analógico (Direção)<br>
-        <span id="valSteer" class="val">0.00</span>
+    <div class="card">
+        <h1>SS PLAY RC CAR</h1>
+        <p>1. Aponte para o carro e clique no RAIO ⚡ para conectar.</p>
+        <p>2. O script vai procurar um objeto chamado <b>"meu_carro"</b>.</p>
+        
+        <div class="controls-list">
+            <div class="row"><span>Acelerar</span> <span class="key">Gatilho Dir (R2)</span></div>
+            <div class="row"><span>Ré / Freio</span> <span class="key">Analógico Baixo</span></div>
+            <div class="row"><span>Virar</span> <span class="key">Analógico Esq/Dir</span></div>
+            <div class="row"><span>Resetar</span> <span class="key">Clique Analógico (R3)</span></div>
+        </div>
+        <div id="status" style="margin-top:15px; color: yellow;">Procurando carro...</div>
     </div>
 
-    <div class="box">
-        Botões (Reset)<br>
-        <span id="valBtn" class="val">---</span>
-    </div>
+    <button class="config-btn" onclick="toggleConfig()">AJUSTES</button>
 
-    <p>Heartbeat: <span id="heartbeat">0</span></p>
+    <div id="configPanel">
+        <h3 style="margin-top:0">Configuração do Carro</h3>
+        
+        <div class="slider-box">
+            <label>Velocidade Máx: <span id="valSpeed">20</span></label>
+            <input type="range" id="sliderSpeed" min="5" max="50" value="20">
+        </div>
+
+        <div class="slider-box">
+            <label>Força da Curva: <span id="valTurn">3</span></label>
+            <input type="range" id="sliderTurn" min="1" max="10" step="0.5" value="3">
+        </div>
+
+        <div class="slider-box">
+            <label>Gravidade (Peso): <span id="valGrav">2</span></label>
+            <input type="range" id="sliderGrav" min="0.5" max="5" step="0.1" value="2">
+        </div>
+
+        <button onclick="toggleConfig()" style="width:100%; padding:10px; background:#000; color:#fff; border:none; cursor:pointer;">FECHAR</button>
+    </div>
 
     <script>
-        let rodando = false;
+        // CONFIGURAÇÕES GERAIS
         let car = null;
-        let counter = 0;
+        let isConnected = false;
 
-        // Tenta conectar no Figmin (mas não trava se falhar)
-        document.addEventListener("FigminReady", () => {
-            car = figmin.findObjectByName("meu_carro");
-            document.getElementById("status").innerText = car ? "CARRO CONECTADO!" : "CARRO NÃO ENCONTRADO (Verifique o nome)";
-        });
+        // Sliders
+        const sliderSpeed = document.getElementById('sliderSpeed');
+        const sliderTurn = document.getElementById('sliderTurn');
+        const sliderGrav = document.getElementById('sliderGrav');
+        
+        // Atualiza números dos sliders
+        sliderSpeed.oninput = () => document.getElementById('valSpeed').innerText = sliderSpeed.value;
+        sliderTurn.oninput = () => document.getElementById('valTurn').innerText = sliderTurn.value;
+        sliderGrav.oninput = () => document.getElementById('valGrav').innerText = sliderGrav.value;
 
-        function iniciarSistema() {
-            document.getElementById("btnStart").style.display = "none";
-            document.getElementById("status").innerText = "SISTEMA RODANDO... MEXA O CONTROLE!";
-            rodando = true;
-            loop();
+        function toggleConfig() {
+            const p = document.getElementById('configPanel');
+            p.style.display = p.style.display === 'block' ? 'none' : 'block';
         }
 
-        function loop() {
-            if (!rodando) return;
+        // --- INICIALIZAÇÃO FIGMIN ---
+        document.addEventListener("FigminReady", init);
 
-            // 1. Contador visual (pra saber se o script tá vivo)
-            counter++;
-            document.getElementById("heartbeat").innerText = counter;
-
-            // 2. Leitura dos Controles
-            const gamepads = navigator.getGamepads();
-            let gp = null;
-
-            // Procura qualquer controle ativo
-            for (let i = 0; i < 4; i++) {
-                if (gamepads[i] && gamepads[i].buttons.length > 0) {
-                    gp = gamepads[i];
-                    break; 
-                }
+        function init() {
+            // Verifica se está no modo Spatial
+            if (!figmin.isSpatialApp()) {
+                figmin.requireSpatialApp();
+                return;
             }
 
-            if (gp) {
-                // --- ATUALIZA A TELA (DEBUG) ---
-                
-                // Gatilho (Botão 0 no Quest / 7 no Xbox)
-                let trigger = gp.buttons[0] ? gp.buttons[0].value : 0;
-                document.getElementById("valTrigger").innerText = trigger.toFixed(2);
+            // Tenta encontrar o carro na cena
+            car = figmin.findObjectByName("meu_carro");
 
-                // Direção (Eixo 2 ou 0)
-                let steer = gp.axes[2] || gp.axes[0] || 0;
-                document.getElementById("valSteer").innerText = steer.toFixed(2);
+            if (!car) {
+                document.getElementById("status").innerText = "ERRO: Objeto 'meu_carro' não encontrado!";
+                document.getElementById("status").style.color = "red";
+                // Tenta de novo a cada 2 segundos caso o modelo ainda esteja carregando
+                setTimeout(init, 2000);
+                return;
+            }
 
-                // Botão A/B (Reset)
-                let btnA = gp.buttons[4] ? gp.buttons[4].pressed : false;
-                let btnB = gp.buttons[1] ? gp.buttons[1].pressed : false; // As vezes B é 1
-                
-                if (btnA) document.getElementById("valBtn").innerText = "A (Press)";
-                else if (btnB) document.getElementById("valBtn").innerText = "B (Press)";
-                else document.getElementById("valBtn").innerText = "---";
+            document.getElementById("status").innerText = "Carro encontrado! Pronto para conectar.";
+            document.getElementById("status").style.color = "#00ff00";
 
-                // --- COMANDO PRO CARRO ---
-                if (car) {
-                    let forward = car.getForwardVector();
-                    // Simples pra teste: Acelera se gatilho > 0.1
-                    if (trigger > 0.1) {
-                         car.applyImpulse({
-                            x: forward.x * trigger * 0.5,
-                            y: forward.y * trigger * 0.5,
-                            z: forward.z * trigger * 0.5
-                        });
-                    }
-                    if (Math.abs(steer) > 0.1) {
-                        car.setAngularVelocity({ x: 0, y: -steer * 3, z: 0 });
-                    }
-                }
+            setupCarPhysics(car);
 
+            // A MÁGICA: Cria o botão de conexão em cima do carro
+            figmin.enableInputConnect("Pilotar Carro", [
+                figmin.InputCode.SELECT_RIGHT, // Gatilho (Acelerar)
+                figmin.InputCode.AXIS_Y_RIGHT, // Analógico Y (Ré)
+                figmin.InputCode.AXIS_X_RIGHT, // Analógico X (Virar)
+                figmin.InputCode.THUMB_RIGHT   // Clique Analógico (Reset)
+            ], onConnectionChange, car);
+
+            // Inicia o Loop
+            figmin.setUpdateFunction(update);
+        }
+
+        function setupCarPhysics(obj) {
+            // Configura física para não voar (diferente do avião)
+            // Kinematic = true no começo para ele não cair do mundo antes de começar
+            obj.addComponent(figmin.ComponentType.PHYSICS, {
+                mass: 1.0,
+                drag: 1.0,        // Freio aerodinâmico natural
+                angularDrag: 2.0, // Para não rodopiar demais
+                gravityStrength: parseFloat(sliderGrav.value),
+                collisionDetectionMode: figmin.physics.CollisionDetectionMode.CONTINUOUS_DYNAMIC,
+                kinematic: false 
+            });
+
+            // Material (Pneu) - Pouco quique, muito atrito
+            obj.addComponent(figmin.ComponentType.PHYSICS_MATERIAL, {
+                bounciness: 0.1,
+                staticFriction: 0.8,
+                dynamicFriction: 0.6
+            });
+        }
+
+        // Chamado quando você clica no RAIO ⚡
+        function onConnectionChange(connected, playerId) {
+            isConnected = connected;
+            if (connected) {
+                document.getElementById("status").innerText = "CONECTADO! PILOTE AGORA.";
+                // Garante que a física tá ativa
+                if(car.physics) car.physics.kinematic = false;
             } else {
-                document.getElementById("status").innerText = "NENHUM CONTROLE DETECTADO. APERTE BOTÕES!";
+                document.getElementById("status").innerText = "Desconectado.";
+                // Para o carro
+                if(car && car.physics) {
+                    car.physics.setLinearVelocity({x:0, y:0, z:0});
+                    car.physics.setAngularVelocity({x:0, y:0, z:0});
+                }
+            }
+        }
+
+        function update(dt) {
+            if (!car || !isConnected || !car.physics) return;
+
+            // --- LEITURA DOS INPUTS (NATIVO DO FIGMIN) ---
+            let throttleIn = figmin.getInput(figmin.InputCode.SELECT_RIGHT); // 0 a 1
+            let steerIn = -figmin.getInput(figmin.InputCode.AXIS_X_RIGHT);   // -1 a 1
+            let verticalStick = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT); // -1 a 1
+            let resetClick = figmin.getInput(figmin.InputCode.THUMB_RIGHT);
+
+            // --- LÓGICA DE MOVIMENTO ---
+            
+            // Ré (Se puxar o analógico pra trás)
+            if (verticalStick < -0.2) {
+                throttleIn = verticalStick; // Vira negativo
             }
 
-            requestAnimationFrame(loop);
+            // Valores dos Sliders
+            const MAX_SPEED = parseFloat(sliderSpeed.value);
+            const TURN_SPEED = parseFloat(sliderTurn.value);
+            const GRAVITY = parseFloat(sliderGrav.value);
+
+            // Atualiza gravidade em tempo real (se mudar slider)
+            car.physics.gravityStrength = GRAVITY;
+
+            // Vetores de direção
+            let forward = car.transform.forward;
+            
+            // ZONA MORTA (Evita drift do controle)
+            if (Math.abs(throttleIn) > 0.05) {
+                // Aplica força (Empurrão)
+                // Multiplicamos por dt (tempo) pra ficar suave
+                let force = {
+                    x: forward.x * throttleIn * MAX_SPEED * dt * 50,
+                    y: forward.y * throttleIn * MAX_SPEED * dt * 50, 
+                    z: forward.z * throttleIn * MAX_SPEED * dt * 50
+                };
+                car.physics.applyForce(force);
+            }
+
+            // CURVAS (Torque)
+            // A curva depende um pouco da velocidade (carro parado vira devagar)
+            // Mas pra ficar divertido (arcade), vamos deixar virar sempre.
+            if (Math.abs(steerIn) > 0.1) {
+                car.physics.applyTorque({
+                    x: 0,
+                    y: steerIn * TURN_SPEED * dt * 100,
+                    z: 0
+                });
+            }
+
+            // ESTABILIZAÇÃO (Evita capotar)
+            // Se o carro tombar muito (Up vector não aponta pra cima), aplicamos força pra corrigir
+            let up = car.transform.up;
+            if (up.y < 0.5) { // Se estiver meio de lado
+                // Tenta desvirar suavemente
+                car.physics.applyTorque({
+                    x: forward.x * 2, 
+                    y: 0, 
+                    z: forward.z * 2
+                });
+            }
+
+            // --- RESET (TELEPORTAR PRO PÉ DO JOGADOR) ---
+            if (resetClick) {
+                resetCarPosition();
+            }
+        }
+
+        function resetCarPosition() {
+            // Zera velocidades
+            car.physics.setLinearVelocity({x:0, y:0, z:0});
+            car.physics.setAngularVelocity({x:0, y:0, z:0});
+
+            // Pega posição da câmera (cabeça do jogador)
+            let cam = figmin.getCamera();
+            let forward = cam.transform.forward; // Onde o jogador tá olhando
+            let camPos = cam.transform.position;
+
+            // Calcula nova posição: 1.5 metros na frente do jogador
+            // E força o Y (altura) a ser baixo pra nascer no chão
+            let newPos = {
+                x: camPos.x + (forward.x * 1.5),
+                y: camPos.y - 1.0, // Tenta jogar pro chão (ajuste conforme altura do user)
+                z: camPos.z + (forward.z * 1.5)
+            };
+
+            // Se o chão for mais alto, a física resolve (colisão)
+            // Se for mais baixo, ele cai.
+            // Para garantir que não atravesse o chão, subimos um tiquinho (+0.5)
+            newPos.y = Math.max(newPos.y, 0.1) + 0.5;
+
+            // Vira o carro pra frente (mesma rotação Y da câmera)
+            let camRot = cam.transform.rotation; 
+            // Queremos apenas o Y (Yaw), zeramos X e Z pro carro ficar plano
+            car.transform.rotation = { x: 0, y: camRot.y, z: 0 };
+            car.transform.position = newPos;
         }
     </script>
 </body>
