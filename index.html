@@ -3,47 +3,44 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RC Car DEBUG FÍSICA</title>
+  <title>RC Car - COLLIDER FORÇADO</title>
   <meta name="figmin">
-  <!-- CSS igual ao anterior, vou pular pra economizar espaço -->
-  <style>/* Mesmo CSS de antes */</style>
+  <!-- Mesmo CSS -->
 </head>
 <body>
-  <!-- Mesmo HTML de antes -->
-  <div class="card">
-    <h1>RC Car DEBUG</h1>
-    <div id="status">Aguardando...</div>
-    <div id="debug">Massa: -- | Atrito: --</div>
-    <!-- controles iguais -->
-    <div id="output">Vel: 0.00 | Acel: 0.00</div>
-  </div>
+  <!-- Mesmo layout -->
+  <div id="status">Aguardando...</div>
+  <div id="debug"></div>
+  <div id="output">Vel: 0 | Acel: 0 | Collider: --</div>
+  <!-- controles -->
 
   <script>
     var car = null;
 
     document.addEventListener("FigminReady", function() {
-      if (!figmin.isSpatialApp()) { figmin.requireSpatialApp(); return; }
-
+      if (!figmin.isSpatialApp()) figmin.requireSpatialApp();
+      
       car = figmin.findObjectByName("meu_carro");
-      if (car) {
-        setupCar();
-      }
+      if (car) setupCar();
     });
 
     function setupCar() {
-      // FÍSICA SUPER LEVE pra testar
+      // *** PASSO 1: FORÇA COLLIDER BOX (tamanho automático) ***
+      car.colliderType = figmin.ColliderType.BOX; // BOX simples [web:1]
+
+      // *** PASSO 2: FÍSICA ULTRA LEVE ***
       car.addComponent(figmin.ComponentType.PHYSICS, {
-        mass: 0.1,        // MUITO LEVE
-        drag: 0.01,       // SEM AR
+        mass: 0.05,        // PLUMA
+        drag: 0.0,         // SEM AR
         angularDrag: 0.1,
-        gravityStrength: 0.5, // GRAVIDADE FRACA
+        gravityStrength: 0.3,
         kinematic: true
       });
 
       car.addComponent(figmin.ComponentType.PHYSICS_MATERIAL, {
         bounciness: 0.0,
-        staticFriction: 0.1,   // ATRITO MÍNIMO
-        dynamicFriction: 0.05  // QUASE ZERO
+        staticFriction: 0.0,  // ZERO ATRITO
+        dynamicFriction: 0.0
       });
 
       figmin.enableInputConnect("RC Car", [
@@ -54,12 +51,13 @@
       ], onInputConnectionChanged, car);
 
       figmin.setUpdateFunction(update);
+      document.getElementById("status").innerText = "✅ Collider BOX + Física OK";
     }
 
     function onInputConnectionChanged(connected) {
       if (connected && car.physics) {
-        car.physics.kinematic = false; // SOLTA DEFINITIVO
-        document.getElementById("status").innerText = "✅ SOLTO! Acelera!";
+        car.physics.kinematic = false;
+        document.getElementById("status").innerText = "🚗 SOLTO! Acelera!";
       }
     }
 
@@ -70,18 +68,17 @@
       var v = car.physics.velocity;
       var speed = Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
 
-      // DEBUG no HUD
+      // DEBUG COMPLETO
       document.getElementById("output").innerText = 
-        `Vel: ${speed.toFixed(2)} | Acel: ${accelIn.toFixed(2)} | Kin: ${car.physics.kinematic}`;
+        `Vel: ${speed.toFixed(2)} | Acel: ${accelIn.toFixed(2)} | Collider: ${car.colliderType}`;
 
-      // FORÇA ENORME pra garantir movimento
-      if (accelIn > 0.1) {
-        car.physics.applyForce({ x: 0, y: 0, z: 100 * dt }); // 100N = MUITO FORTE!
-      }
-
-      // Debug massa/atrito no card
       document.getElementById("debug").innerText = 
-        `Massa: ${car.physics.mass?.toFixed(1)} | Atrito: ${car.physicsMaterial?.dynamicFriction || 'N/A'}`;
+        `Massa: ${car.physics.mass?.toFixed(2)} | Kin: ${car.physics.kinematic}`;
+
+      if (accelIn > 0.05) {
+        // FORÇA INSANA no eixo Z LOCAL
+        car.physics.applyForce({ x: 0, y: 0, z: 200 * dt }); // 200N!
+      }
     }
   </script>
 </body>
