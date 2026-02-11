@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>SS Play RC - Final System</title>
+    <title>SS Play RC - Native</title>
     <meta name="figmin">
     <style>
         body {
@@ -16,25 +16,23 @@
         .hud {
             position: fixed; top: 20px; left: 20px;
             background: rgba(10, 10, 10, 0.95);
-            border: 2px solid #00ff00;
+            border: 2px solid #3b82f6;
             color: #fff;
             padding: 20px;
             border-radius: 15px;
             text-align: left;
             pointer-events: auto;
-            width: 280px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            width: 300px;
         }
-        .stat { color: #fbbf24; font-weight: bold; font-size: 16px; }
+        .stat { color: #00ff00; font-weight: bold; font-size: 16px; }
         .controls { margin-top: 15px; font-size: 14px; color: #ccc; line-height: 1.6; }
-        b { color: #fff; }
     </style>
 </head>
 <body>
 
     <div class="hud">
-        <h3 style="margin:0; color:#00ff00;">SS PLAY RC <span style="font-size:12px; color:#fff;">v17.0</span></h3>
-        <div id="status" class="stat">Procurando 'meu_carro'...</div>
+        <h3 style="margin:0; color:#3b82f6;">SS PLAY RC <span style="font-size:12px; color:#fff;">v18.0</span></h3>
+        <div id="status" class="stat">Aguardando Conexão...</div>
         <hr style="border-color:#333">
         <div class="controls">
             👉 <b>R2 (Gatilho Dir):</b> Acelerar<br>
@@ -45,139 +43,107 @@
     </div>
 
     <script>
-        // --- AJUSTES ---
-        const FORCA_MOTOR = 100.0;
+        // --- AJUSTES DE FÍSICA ---
+        const FORCA_MOTOR = 80.0;
         const VEL_CURVA = 3.5;
         const PESO = 3.0;
         
         // Se o carro andar de lado, mude para true
         const MODELO_DE_LADO = false; 
-        // ---------------
+        // --------------------------
 
         var car = null;
-        var searchTimer = null;
         var statusDiv = document.getElementById("status");
 
-        // Função para garantir a frente correta
-        function getForwardVector(q) {
-            const x = q.x, y = q.y, z = q.z, w = q.w;
-            if (MODELO_DE_LADO) {
-                return { 
-                    x: 1 - 2 * (y * y + z * z),
-                    y: 2 * (x * y + w * z),
-                    z: 2 * (x * z - w * y)
-                };
+        // --- FUNÇÕES MATEMÁTICAS (Copiadas do script do Avião) ---
+        // Elas garantem que a força seja aplicada LOCALMENTE
+        function quaternionMultiply(q1, q2) {
+            return {
+                w: q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z,
+                x: q1.w * q2.x + q1.x * q2.w + q1.y * q2.z - q1.z * q2.y,
+                y: q1.w * q2.y - q1.x * q2.z + q1.y * q2.w + q1.z * q2.x,
+                z: q1.w * q2.z + q1.x * q2.y - q1.y * q2.x + q1.z * q2.w
+            };
+        }
+        function quaternionConjugate(q) { return { w: q.w, x: -q.x, y: -q.y, z: -q.z }; }
+        function quaternionRotateVector(q, v) {
+            var qv = { w: 0, x: v.x, y: v.y, z: v.z };
+            var qConj = quaternionConjugate(q);
+            var q1 = quaternionMultiply(q, qv);
+            var q2 = quaternionMultiply(q1, qConj);
+            return { x: q2.x, y: q2.y, z: q2.z };
+        }
+
+        // --- INICIALIZAÇÃO (Igual ao do Avião) ---
+        document.addEventListener("FigminReady", init);
+
+        function init() {
+            // Busca direta, uma única vez
+            car = figmin.findObjectByName("meu_carro");
+
+            if (car) {
+                statusDiv.innerText = "PRONTO! CLIQUE NO RAIO ⚡";
+                setupCar(car);
             } else {
-                return { 
-                    x: 2 * (x * z + w * y),
-                    y: 2 * (y * z - w * x),
-                    z: 1 - 2 * (x * x + y * y)
-                };
+                statusDiv.innerText = "ERRO: 'meu_carro' não encontrado.";
+                statusDiv.style.color = "red";
             }
         }
 
-        document.addEventListener("FigminReady", function() {
-            // O RADAR VOLTOU: Tenta achar o carro a cada 1 segundo
-            searchTimer = setInterval(tryFindCar, 1000);
-        });
-
-        function tryFindCar() {
-            var found = figmin.findObjectByName("meu_carro");
-            
-            if (found) {
-                // ACHOU! Para o radar e inicia o sistema
-                clearInterval(searchTimer);
-                car = found;
-                
-                statusDiv.innerText = "CARRO ENCONTRADO! ⚡";
-                statusDiv.style.color = "#00ff00"; // Verde
-                
-                setupCar();
-            } else {
-                // Não achou ainda...
-                statusDiv.innerText = "Procurando 'meu_carro'...";
-                statusDiv.style.color = "#fbbf24"; // Amarelo
-            }
-        }
-
-        function setupCar() {
-            car.addComponent(figmin.ComponentType.PHYSICS, {
-                mass: PESO,           
+        function setupCar(obj) {
+            // Configura física
+            obj.addComponent(figmin.ComponentType.PHYSICS, {
+                mass: PESO,
                 drag: 2.0,            
                 angularDrag: 4.0,     
                 gravityStrength: 1.0, 
                 kinematic: false      
             });
 
+            // Conexão de input
             figmin.enableInputConnect("Controle RC", [
                 figmin.InputCode.SELECT_RIGHT, // R2
                 figmin.InputCode.SELECT_LEFT,  // L2
                 figmin.InputCode.AXIS_X_RIGHT, // Direção
                 figmin.InputCode.BUTTON_1      // Reset
-            ], onConnect, car);
+            ], onInputConnectionChanged, obj);
 
+            // Loop de atualização
             figmin.setUpdateFunction(update);
         }
 
-        function onConnect(connected) {
+        function onInputConnectionChanged(connected, playerId) {
             statusDiv.innerText = connected ? "PILOTANDO!" : "Desconectado";
             statusDiv.style.color = connected ? "#00ff00" : "yellow";
-            if (connected && car.physics) car.physics.wakeUp();
+            if (connected && car && car.physics) {
+                car.physics.wakeUp();
+            }
         }
 
         function update(dt) {
             if (!car || !car.physics) return;
 
+            // Inputs
             var throttleFwd = figmin.getInput(figmin.InputCode.SELECT_RIGHT);
             var throttleRev = figmin.getInput(figmin.InputCode.SELECT_LEFT);
             var steer = -figmin.getInput(figmin.InputCode.AXIS_X_RIGHT);
             var resetBtn = figmin.getInput(figmin.InputCode.BUTTON_1);
 
-            // Força Motor
+            // Calcula Força (Frente - Ré)
             var inputForce = 0;
             if (throttleFwd > 0.05) inputForce = throttleFwd;
             if (throttleRev > 0.05) inputForce = -throttleRev;
 
-            // 1. Aplica força na direção do nariz do carro
-            var fwd = getForwardVector(car.transform.rotationq);
+            // --- FÍSICA CORRIGIDA COM QUATERNIONS ---
             
-            if (Math.abs(inputForce) > 0.05) {
-                car.physics.applyForce({
-                    x: fwd.x * inputForce * FORCA_MOTOR,
-                    y: fwd.y * inputForce * FORCA_MOTOR, 
-                    z: fwd.z * inputForce * FORCA_MOTOR
-                });
+            // 1. Define o vetor de empuxo LOCAL (Relativo ao chassi do carro)
+            var thrustLocal = { x: 0, y: 0, z: 0 };
+            
+            if (MODELO_DE_LADO) {
+                thrustLocal.x = inputForce * FORCA_MOTOR; // Se o modelo for torto (X é frente)
+            } else {
+                thrustLocal.z = inputForce * FORCA_MOTOR; // Padrão (Z é frente)
             }
 
-            // 2. Curva
-            if (Math.abs(steer) > 0.1) {
-                var currentVel = car.physics.angularVelocity;
-                car.physics.setAngularVelocity({
-                    x: currentVel.x * 0.5,      
-                    y: steer * VEL_CURVA,       
-                    z: currentVel.z * 0.5       
-                });
-            }
-
-            // 3. Estabilidade (Anti-Tombo)
-            if (car.transform.up.y < 0.5) {
-                var r = car.transform.rotation;
-                car.transform.rotation = { x: 0, y: r.y, z: 0 };
-                car.physics.setAngularVelocity({x:0, y:0, z:0});
-            }
-
-            // Reset
-            if (resetBtn) {
-                var cam = figmin.getCamera();
-                car.transform.position = {
-                    x: cam.transform.position.x + cam.transform.forward.x * 2,
-                    y: cam.transform.position.y - 0.5,
-                    z: cam.transform.position.z + cam.transform.forward.z * 2
-                };
-                car.physics.setLinearVelocity({x:0, y:0, z:0});
-                car.physics.setAngularVelocity({x:0, y:0, z:0});
-            }
-        }
-    </script>
-</body>
-</html>
+            // 2. Converte para GLOBAL usando a rotação do carro
+            // (Is
