@@ -2,68 +2,64 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>SS Play RC - Calibração de Eixo</title>
+    <title>SS Play RC - Local Physics</title>
     <meta name="figmin">
     <style>
         body { background: transparent; font-family: sans-serif; text-align: center; margin: 0; pointer-events: none; }
         .hud { 
             position: fixed; top: 20px; left: 20px; 
-            background: rgba(0,0,0,0.9); color: #00ff00; 
-            padding: 15px; border-radius: 12px; border: 1px solid #444; 
+            background: rgba(15, 23, 42, 0.9); color: #00ff00; 
+            padding: 15px; border-radius: 12px; border: 1px solid #3b82f6; 
             max-width: 300px; text-align: left; pointer-events: auto; 
         }
-        b { color: yellow; }
     </style>
 </head>
 <body>
 
     <div class="hud">
-        <h1>CALIBRAÇÃO DE EIXO</h1>
+        <h1>SS PLAY RC (FÍSICA LOCAL)</h1>
         <div id="status">Conecte o Raio...</div>
-        <hr>
-        <div style="font-size:12px; color:#ccc;">
-            Ângulo Atual: <b id="valAngulo">0</b>°<br>
-            <p>Se o carro não andar para frente, me avise o ângulo que você testou.</p>
+        <div style="font-size:11px; color:#9ca3af; margin-top:5px;">
+            A força agora segue o <b>nariz</b> do carro.
         </div>
     </div>
 
     <script>
-        // --- CALIBRAÇÃO (MUDE AQUI) ---
-        // Tente valores como: 90, 180, 270 ou 135 (para diagonais)
-        const AJUSTE_ANGULO = 0; 
+        // Se o carro andar "de lado", mude para true
+        const USAR_EIXO_X = false; 
         
-        const FORCA_MOTOR = 800.0;
-        const VEL_CURVA = 4.0;
-        // ------------------------------
+        const FORCA_MOTOR = 600.0; 
+        const VEL_CURVA = 5.0;
 
         var car = null;
 
-        function rotateVector(q, v) {
-            var qx = q.x, qy = q.y, qz = q.z, qw = q.w;
-            var vx = v.x, vy = v.y, vz = v.z;
-            var ix = qw * vx + qy * vz - qz * vy;
-            var iy = qw * vy + qz * vx - qx * vz;
-            var iz = qw * vz + qx * vy - qy * vx;
-            var iw = -qx * vx - qy * vy - qz * vz;
-            return {
-                x: ix * qw + iw * -qx + iy * -qz - iz * -qy,
-                y: iy * qw + iw * -qy + iz * -qx - ix * -qz,
-                z: iz * qw + iw * -qz + ix * -qy - iy * -qx
-            };
+        // MATEMÁTICA DO AVIÃO (Conversão de Local para Global)
+        function getForwardVector(q) {
+            // Se USAR_EIXO_X for false, extraímos o eixo Z (frente padrão)
+            // Se for true, extraímos o eixo X (frente lateral)
+            if (!USAR_EIXO_X) {
+                return {
+                    x: 2 * (q.x * q.z + q.w * q.y),
+                    y: 2 * (q.y * q.z - q.w * q.x),
+                    z: 1 - 2 * (q.x * q.x + q.y * q.y)
+                };
+            } else {
+                return {
+                    x: 1 - 2 * (q.y * q.y + q.z * q.z),
+                    y: 2 * (q.x * q.y + q.w * q.z),
+                    z: 2 * (q.x * q.z - q.w * q.y)
+                };
+            }
         }
-
-        document.getElementById("valAngulo").innerText = AJUSTE_ANGULO;
 
         document.addEventListener("FigminReady", function() {
             car = figmin.findObjectByName("meu_carro");
-            if (car) {
-                setupCar();
-            }
+            if (car) { setupCar(); }
         });
 
         function setupCar() {
             car.addComponent(figmin.ComponentType.PHYSICS, {
-                mass: 3.0, drag: 1.0, angularDrag: 3.0,
+                mass: 2.0, drag: 1.5, angularDrag: 4.0,
                 gravityStrength: 3.0, kinematic: false 
             });
 
@@ -85,34 +81,46 @@
             var throttle = figmin.getInput(figmin.InputCode.SELECT_RIGHT);
             var steer = -figmin.getInput(figmin.InputCode.AXIS_X_RIGHT);
             var stickY = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT);
-            
-            if (stickY < -0.2) throttle = -Math.abs(stickY);
+            var resetBtn = figmin.getInput(figmin.InputCode.THUMB_RIGHT);
 
-            // --- CÁLCULO DO EIXO CORRETO ---
-            var rad = AJUSTE_ANGULO * (Math.PI / 180);
-            
-            // Criamos um vetor de frente baseado no ângulo de calibração
-            var localFwd = {
-                x: Math.sin(rad),
-                y: 0,
-                z: Math.cos(rad)
-            };
+            // Determina se é frente ou ré
+            var direction = 1;
+            if (stickY < -0.2) {
+                throttle = Math.abs(stickY);
+                direction = -1;
+            }
 
-            var worldFwd = rotateVector(car.transform.rotationq, localFwd);
+            // PEGA A FRENTE DO CARRO BASEADA NA ROTAÇÃO DELE
+            var forward = getForwardVector(car.transform.rotationq);
 
-            if (Math.abs(throttle) > 0.05) {
-                var forceMag = throttle * FORCA_MOTOR * dt * 60;
+            // Aplica a força na direção que o carro está olhando
+            if (throttle > 0.05) {
+                var forceMag = throttle * FORCA_MOTOR * direction * dt * 60;
                 car.physics.applyForce({
-                    x: worldFwd.x * forceMag,
-                    y: worldFwd.y * forceMag,
-                    z: worldFwd.z * forceMag
+                    x: forward.x * forceMag,
+                    y: forward.y * forceMag,
+                    z: forward.z * forceMag
                 });
             }
 
+            // Giro Local (Sempre em torno do próprio eixo Y do carro)
             if (Math.abs(steer) > 0.1) {
                 car.physics.setAngularVelocity({
-                    x: 0, y: steer * VEL_CURVA, z: 0
+                    x: 0, 
+                    y: steer * VEL_CURVA, 
+                    z: 0
                 });
+            }
+
+            // Reset
+            if (resetBtn) {
+                car.physics.setLinearVelocity({x:0, y:0, z:0});
+                var cam = figmin.getCamera();
+                car.transform.position = {
+                    x: cam.transform.position.x + cam.transform.forward.x * 2,
+                    y: cam.transform.position.y,
+                    z: cam.transform.position.z + cam.transform.forward.z * 2
+                };
             }
         }
     </script>
