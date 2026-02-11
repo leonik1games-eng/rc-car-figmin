@@ -3,91 +3,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="figmin">
-    <title>RC Car SS Play</title>
+    <title>SS Play RC</title>
     <style>
-        :root { --accent: #3b82f6; --bg: #020617; --text-muted: #9ca3af; --ui-scale: 1.6; }
+        :root { --accent: #3b82f6; --bg: #020617; }
         html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background-color: transparent; }
-        body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; text-align: center; color: #f9fafb; }
+        body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; text-align: center; color: white; }
         .card {
-            padding: 24px 28px; border-radius: 20px;
+            padding: 24px; border-radius: 20px;
             background: rgba(15, 23, 42, 0.95);
-            box-shadow: 0 18px 45px rgba(0, 0, 0, 0.9);
             border: 1px solid rgba(148, 163, 184, 0.35);
-            max-width: 440px; transform: scale(var(--ui-scale));
+            width: 350px;
         }
-        h1 { margin: 0 0 8px; font-size: 26px; }
-        .subtitle { margin: 0 0 10px; font-size: 14px; color: var(--text-muted); }
-        .status-msg { font-weight: bold; color: #fbbf24; margin-bottom: 15px; display: block; font-size: 16px; }
-        .controls { padding: 12px; border-radius: 12px; background: rgba(59, 130, 246, 0.15); text-align: left; font-size: 13px; }
-        .control-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        h1 { margin: 0; font-size: 22px; color: #3b82f6; }
+        p { font-size: 14px; color: #9ca3af; }
     </style>
 </head>
 <body>
     <div class="card">
         <h1>SS PLAY RC</h1>
-        <span id="status" class="status-msg">PROCURANDO 'meu_carro'...</span>
-        <div class="controls">
-            <div class="control-row"><span>Acelerar</span><b>Gatilho Dir</b></div>
-            <div class="control-row"><span>Virar</span><b>Analógico Dir</b></div>
-            <div class="control-row"><span>Ré</span><b>Analógico Baixo</b></div>
-            <div class="control-row"><span>Resetar</span><b>Botão A</b></div>
-        </div>
+        <p id="status">Se o raio não aparecer,<br>clique em <b>REFRESH</b> no navegador.</p>
     </div>
 
     <script>
         var car = null;
-        var radar = null;
 
-        // Inicia a busca assim que o Figmin der o OK
+        // Tenta carregar ASSIM que o Figmin der o sinal
         document.addEventListener("FigminReady", function() {
-            // Radar de 1 segundo
-            radar = setInterval(function() {
-                var found = figmin.findObjectByName("meu_carro");
-                
-                if (found) {
-                    // 1. MATA O RADAR IMEDIATAMENTE (Para não bugar o raio)
-                    clearInterval(radar);
-                    radar = null;
-                    
-                    // 2. SALVA A REFERÊNCIA
-                    car = found;
-                    
-                    // 3. ATUALIZA A TELA
-                    document.getElementById('status').innerText = "CARRO PRONTO! ⚡";
-                    document.getElementById('status').style.color = "#4ade80";
-                    
-                    // 4. LIGA O SISTEMA
-                    startCarSystem();
-                }
-            }, 1000);
-        });
+            car = figmin.findObjectByName("meu_carro");
 
-        function startCarSystem() {
-            // Injeta física básica
-            car.addComponent(figmin.ComponentType.PHYSICS, {
-                mass: 1.0,
-                drag: 1.5,
-                angularDrag: 2.5,
-                gravityStrength: 2.0,
-                kinematic: false
-            });
+            if (car) {
+                // Injeta física
+                car.addComponent(figmin.ComponentType.PHYSICS, {
+                    mass: 1.0,
+                    drag: 1.5,
+                    angularDrag: 2.5,
+                    gravityStrength: 2.0,
+                    kinematic: false
+                });
 
-            // Cria o raio de conexão
-            figmin.enableInputConnect("Controle RC", [
-                figmin.InputCode.SELECT_RIGHT,
-                figmin.InputCode.AXIS_Y_RIGHT,
-                figmin.InputCode.AXIS_X_RIGHT,
-                figmin.InputCode.BUTTON_1
-            ], function(connected) {
-                if(connected) {
-                    document.getElementById('status').innerText = "CONECTADO!";
-                    if (car.physics) car.physics.wakeUp();
-                }
-            }, car);
+                // Liga o Raio
+                figmin.enableInputConnect("Controle RC", [
+                    figmin.InputCode.SELECT_RIGHT,
+                    figmin.InputCode.AXIS_Y_RIGHT,
+                    figmin.InputCode.AXIS_X_RIGHT,
+                    figmin.InputCode.BUTTON_1
+                ], function(connected) {
+                    if(connected) {
+                        document.getElementById('status').innerText = "CONECTADO!";
+                        if (car.physics) car.physics.wakeUp();
+                    }
+                }, car);
 
-            // Liga o loop de movimento
+                document.getElementById('status').innerText = "CARRO PRONTO! CLIQUE NO RAIO ⚡";
+                document.getElementById('status').style.color = "#4ade80";
+            } else {
+                document.getElementById('status').innerText = "ERRO: 'meu_carro' não encontrado.\nRenomeie e dê Refresh.";
+                document.getElementById('status').style.color = "#f87171";
+            }
+
             figmin.setUpdateFunction(update);
-        }
+        });
 
         function update(dt) {
             if (!car || !car.physics) return;
@@ -97,7 +72,6 @@
             var stickY = figmin.getInput(figmin.InputCode.AXIS_Y_RIGHT);
             var btnA = figmin.getInput(figmin.InputCode.BUTTON_1);
 
-            // Reset
             if (btnA) {
                 var cam = figmin.getCamera();
                 car.transform.position = {
@@ -112,17 +86,14 @@
             var forward = car.transform.forward;
             var finalThrottle = (stickY < -0.2) ? stickY : throttle;
 
-            // Motor
             if (Math.abs(finalThrottle) > 0.05) {
-                var power = 45.0;
                 car.physics.applyForce({
-                    x: forward.x * finalThrottle * power,
-                    y: forward.y * finalThrottle * power,
-                    z: forward.z * finalThrottle * power
+                    x: forward.x * finalThrottle * 40.0,
+                    y: forward.y * finalThrottle * 40.0,
+                    z: forward.z * finalThrottle * 40.0
                 });
             }
 
-            // Direção
             if (Math.abs(steer) > 0.1) {
                 car.physics.applyTorque({ x: 0, y: steer * 4.0, z: 0 });
             }
